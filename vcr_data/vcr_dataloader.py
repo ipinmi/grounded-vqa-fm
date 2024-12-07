@@ -1,14 +1,13 @@
-# Refactored code from Dataset. Attribution: r2c (VCR dataset)
+# Contains refactored code from Dataset (VCRDataExtractor and index_to_names). Attribution: r2c (VCR dataset)
 
-# python3 dataloader/data.py --annots_dir data/vcr1annots --image_dir data/vcr1images
+# USAGE: python3 dataloader/data.py --annots_dir data/vcr1annots --image_dir data/vcr1images
 import os
 import json
 from copy import deepcopy
 import numpy as np
 import torch
-from torch.utils.data import Dataset, DataLoader
-
-from vcr_data.vcr_masking import make_mask
+from torch.utils.data import Dataset, DataLoader, Sampler
+import random
 
 # Gender-neutral names for replacing the label for "person"
 GENDER_NEUTRAL_NAMES = [
@@ -30,10 +29,10 @@ GENDER_NEUTRAL_NAMES = [
 ]
 
 
-def label_to_names(sentence, object_type_list, rel_detection_indices, padding_idx=-1):
+def index_to_names(sentence, object_type_list, rel_detection_indices, padding_idx=-1):
     """
     Converts the object detection labels to gender-neutral names
-    for processing by the vision-language model.
+    for processing by the vision-language model, adding "and" between two person objects.
 
     Args:
     sentence: A string containing the object detection labels as an embedded list
@@ -49,6 +48,8 @@ def label_to_names(sentence, object_type_list, rel_detection_indices, padding_id
     new_sentence = []
     new_tags = []
 
+    last_was_person = False
+
     for obj_detect in sentence:
         if isinstance(obj_detect, list):
             for obj_index in obj_detect:
@@ -61,16 +62,23 @@ def label_to_names(sentence, object_type_list, rel_detection_indices, padding_id
                     )
 
                 # Replace the label for "person" with the gender-neutral name
-                name = (
-                    GENDER_NEUTRAL_NAMES[new_idx % len(GENDER_NEUTRAL_NAMES)]
-                    if obj_type == "person"
-                    else obj_type
-                )
-                new_sentence.append(name)
+                if obj_type == "person":
+                    name = GENDER_NEUTRAL_NAMES[new_idx % len(GENDER_NEUTRAL_NAMES)]
+                    if last_was_person:
+                        new_sentence.append(
+                            "and"
+                        )  # Add "and" between consecutive persons
+                    new_sentence.append(name)
+                    last_was_person = True
+                else:
+                    new_sentence.append(obj_type)
+                    last_was_person = False
+
                 new_tags.append(new_idx)
         else:
             new_sentence.append(obj_detect)
             new_tags.append(padding_idx)
+            last_was_person = False
 
     return new_sentence, new_tags
 
@@ -81,7 +89,7 @@ class VCRDataExtractor(Dataset):
         annots_dir,
         image_dir,
         mode="answer",
-        split="train",
+        split="val",
         only_use_relevant_dets=True,
     ):
         """
@@ -90,24 +98,19 @@ class VCRDataExtractor(Dataset):
         mode: answer or rationale (Q-A or QA-R tasks)
         only_use_relevant_dets: If True, only use the relevant detections
         """
-        # self.image_dir = VCR_IMAGES_DIR
         self.mode = mode
         self.split = split
         self.use_relevant_dets = only_use_relevant_dets
         self.annots_dir = annots_dir
         self.image_dir = image_dir
 
-        # NOTE: conditioned on answer choice for QA-R task for test mode
-        self.conditioned_answer_choice = None
-
         # Load the annotations for the split
         with open(
-            os.path.join(annots_dir, "reduced_{}.jsonl".format(split)), "r"
+            os.path.join(annots_dir, "{}.jsonl".format(split)), "r"
         ) as jsonl_file:
             self.data = [json.loads(line) for line in jsonl_file]
 
         # Load COCO ontology for object detection labels
-        # NOTE: change the path to correct one
         with open(
             os.path.join(self.annots_dir, "cocoontology.json"),
             "r",
@@ -186,20 +189,20 @@ class VCRDataExtractor(Dataset):
         """
         item = deepcopy(self.data[idx])
 
-        # for the QA-R task, append the answer choice to the question
-        if self.mode == "rationale":
-            conditioned_label = (
-                item["answer_label"]
-                if self.split != "test"
-                else self.conditioned_answer_choice
-            )
-            item["question"] += item["answer_choices"][conditioned_label]
-
-        answer_choices = item["answer_choices"]
         dets2use, old_det_to_new_ind = self._get_dets_to_use(item)
 
+        # for the QA-R task, append the correct answer choice to the question
+        if self.mode == "rationale":
+            conditioned_label = item["answer_label"]
+            item["question"] += item["answer_choices"][conditioned_label]
+            answer_choices = item["rationale_choices"]
+
+        # for the Q-A task, use the answer choices
+        elif self.mode == "answer":
+            answer_choices = item["answer_choices"]
+
         # Converted the question and answer choices
-        converted_questions, converted_question_tags = label_to_names(
+        converted_questions, converted_question_tags = index_to_names(
             item["question"],
             item["objects"],
             old_det_to_new_ind,
@@ -208,7 +211,7 @@ class VCRDataExtractor(Dataset):
 
         converted_answers, converted_answer_tags = zip(
             *[
-                label_to_names(
+                index_to_names(
                     answer,
                     item["objects"],
                     old_det_to_new_ind,
@@ -236,6 +239,8 @@ class VCRDataExtractor(Dataset):
             "question_number": item["question_number"],
         }
 
+        ########## IMAGE INFORMATION ##########
+
         # Get image and its metadata paths
         image_path = os.path.join(self.image_dir, item["img_fn"])
         instance_dict["image_path"] = image_path
@@ -246,19 +251,7 @@ class VCRDataExtractor(Dataset):
         with open(img_metadata_path, "r") as img_metadata_file:
             img_metadata = json.load(img_metadata_file)
 
-        # segmentation mask of size 14x14 based on bounding boxes and polygon data
-        segmentations = np.stack(
-            [
-                make_mask(
-                    mask_size=14,
-                    box=img_metadata["boxes"][i],
-                    polygons_list=img_metadata["segms"][i],
-                )
-                for i in dets2use
-            ]
-        )
-
-        # Remove final dimension (confidence) from boxes
+        # Remove final dimension (detection confidence) from boxes
         boxes = np.array(img_metadata["boxes"])[dets2use, :-1]
 
         # Object categories based on coco ontology
@@ -269,12 +262,10 @@ class VCRDataExtractor(Dataset):
         ]
 
         # NOTE: adding the whole image as an object
-
         objects_tensors = [torch.Tensor(obj_labels) for x in obj_labels]
         instance_dict["objects"] = torch.stack(objects_tensors, dim=0)
 
-        # NOTE: padding the segmentations (0) and boxes (-1) in dataloader
-        instance_dict["segmentations"] = torch.Tensor(segmentations)
+        # NOTE: padding the bounding boxes (-1) in dataloader
         instance_dict["boxes"] = torch.Tensor(boxes)
 
         return instance_dict
@@ -293,21 +284,25 @@ class VCRDataset(Dataset):
                 - 'objdet' (for object detection)
         """
         self.data = []
-        self.fields_to_add = ["boxes", "segmentations", "objects", "objects_cats"]
+        self.fields_to_add = ["objects", "objects_cats"]
 
         for instance in data:
+            annot_id = instance["metadata"]["annot_id"]
             image_path = instance["image_path"]
             question = instance["question"]
             answers = instance["answers"]
             label = instance["label"]
+            bounding_boxes = instance["boxes"]
 
             self.data.extend(
                 {
+                    "annot_id": annot_id,
                     "question": question,
                     "answer": answer,
                     "label": int(idx == label),
                     "image_path": image_path,
                     "label_index": label,
+                    "boxes": bounding_boxes,
                     **(
                         {
                             field: instance[field]
@@ -328,17 +323,46 @@ class VCRDataset(Dataset):
         return self.data[idx]
 
 
-class VCRDataLoader(DataLoader):
+class BatchSampler(Sampler):
     def __init__(self, dataset, batch_size):
+        self.dataset = dataset
+        self.batch_size = batch_size
+        self.num_batches = len(dataset) // batch_size
+
+        # Ensure no remainder
+        assert (
+            len(dataset) % batch_size == 0
+        ), "Dataset size must be divisible by batch size."
+
+    def __iter__(self):
+        # Generate batch indices
+        batch_indices = list(range(self.num_batches))
+        random.shuffle(batch_indices)  # Shuffle batch order
+
+        for batch_idx in batch_indices:
+            # Generate indices for the current batch
+            start_idx = batch_idx * self.batch_size
+            end_idx = start_idx + self.batch_size
+            yield list(
+                range(start_idx, end_idx)
+            )  # Yield indices in order within the batch
+
+    def __len__(self):
+        return self.num_batches
+
+
+class VCRDataLoader(DataLoader):
+    def __init__(self, dataset, batch_sampler):
         """
         Args:
             dataset: An instance of the VCRDataset class
-            batch_size: Batch size (must be a multiple of 4)
+            batch_sampler: An instance of BatchSampler for custom batch shuffling
         """
-        if batch_size % 4 != 0:
-            raise ValueError("Batch size must be a multiple of 4.")
         super().__init__(
-            dataset, batch_size=batch_size, shuffle=False, collate_fn=self._collate_fn
+            dataset=dataset,
+            batch_sampler=batch_sampler,  # Pass BatchSampler here
+            shuffle=False,  # Disable shuffle as batch_sampler handles it
+            collate_fn=self._collate_fn,  # Use the custom collate function
         )
 
     @staticmethod
@@ -360,15 +384,15 @@ class VCRDataLoader(DataLoader):
                 }
             )
 
+        annot_id = collect_unique("annot_id")
         questions = [" ".join(item["question"]) for item in batch]
         answers = [" ".join(item["answer"]) for item in batch]
         labels = [item["label"] for item in batch]
         image_paths = collect_unique("image_path")
         optional_fields = {
             "boxes": collect_unique("boxes"),
-            "segmentations": collect_unique("segmentations"),
             "objects": collect_unique("objects"),
             "objects_cats": collect_unique("objects_cats"),
         }
 
-        return image_paths, questions, answers, labels, optional_fields
+        return annot_id, image_paths, questions, answers, labels, optional_fields
