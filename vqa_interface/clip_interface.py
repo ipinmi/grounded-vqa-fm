@@ -64,9 +64,9 @@ def run_CLIP_batch(dataloader: DataLoader):
                 "correct_answer": answers[labels.index(1)],  # The correct answer
                 "correct_index": int(labels.index(1) + 1),  # Index to label
             }
-            # testing over 10 examples
+            """# testing over 10 examples
             if idx == 10:
-                break
+                break"""
 
     return results
 
