@@ -29,6 +29,9 @@ def run_CLIP_batch(dataloader: DataLoader):
             for question, answer in zip(questions, answers)
         ]
 
+        # Limit to 77 tokens
+        question_answers = [qa[:77] for qa in question_answers]
+
         with torch.no_grad():
             # Create inputs for the model
             inputs = preprocessor(
