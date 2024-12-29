@@ -2,16 +2,23 @@ import argparse
 import matplotlib.pyplot as plt
 import json
 import subprocess
+from torch.utils.data import DataLoader
 
 
 ##MODULES
-from vqa_interface.clip_interface import run_CLIP_batch, eval_on_accuracy
+from vqa_interface.clip_interface import (
+    run_CLIP_on_VCR,
+    run_CLIP_on_VQA,
+    eval_on_accuracy,
+)
 from vcr_data.vcr_dataloader import (
     VCRDataExtractor,
     VCRDataset,
     VCRDataLoader,
     BatchSampler,
 )
+
+from vqa_data.vqa_dataloader import load_vqa_data, VQADataset
 
 # from clip_detector.object_detector import *
 
@@ -36,26 +43,34 @@ parser.add_argument(
     default="results",
 )
 
+parser.add_argument(
+    "--dataset",
+    help="Dataset to be used",
+    default="vcr",
+    required=True,
+)
 
 args = parser.parse_args()
-VCR_ANNOTS_DIR = args.annots_dir
-VCR_IMAGES_DIR = args.image_dir
+ANNOTS_DIR = args.annots_dir
+IMAGES_DIR = args.image_dir
 results_path = args.results_path
+dataset_type = args.dataset
 
 subprocess.run(["mkdir", "-p", results_path])
 
 
 def save_json(data, path):
     with open(path, "w") as f:
-        json.dump(data, f)
+        json.dump(data, f, default=int)
 
 
-def main():
+def vcr_main():
+    # Extract data from VCR and create a dataloader
     extracted_vcr = VCRDataExtractor(
-        VCR_ANNOTS_DIR,
-        VCR_IMAGES_DIR,
+        ANNOTS_DIR,
+        IMAGES_DIR,
         mode="answer",
-        split="train",
+        split="val",
         only_use_relevant_dets=False,
     )
     dataset = VCRDataset(extracted_vcr, "vqa")
@@ -63,19 +78,43 @@ def main():
     dataloader = VCRDataLoader(dataset, batch_sampler=batch_sampler)
 
     # Run the CLIP model
-    vqa_results = run_CLIP_batch(dataloader)
-    save_json(vqa_results, "results/clip_vqa_results.json")
+    vcr_results = run_CLIP_on_VCR(dataloader)
+    save_json(vcr_results, "results/clip_vcr_results.json")
     # print(vqa_results)
 
     # Evaluate the model
-    accuracy, pred_value_1, total = eval_on_accuracy(vqa_results)
+    accuracy, pred_value_1, total = eval_on_accuracy(vcr_results, dataset_type)
     print(f"Accuracy: {accuracy}")
     print(f"No of times Predicted value is 1: {pred_value_1}")
     print(f"Total: {total}")
 
 
+def vqa_main():
+    batchSize = 1
+    qa_pairs = load_vqa_data(ANNOTS_DIR)
+    # Create dataset and dataloader
+    dataset = VQADataset(qa_pairs, ANNOTS_DIR)
+    dataloader = DataLoader(dataset, batch_size=batchSize, shuffle=True)
+
+    # Run the CLIP model on VQA V2 data
+    vqa_results = run_CLIP_on_VQA(dataloader)
+    save_json(vqa_results, "results/clip_vqa_results.json")
+
+    # Evaluate the model
+    accuracy = eval_on_accuracy(vqa_results, dataset_type)
+    accuracy, pred_value_1, total = eval_on_accuracy(vqa_results, dataset_type)
+    print(f"Accuracy: {accuracy}")
+    print(f"Number of accurate results: {pred_value_1}")
+    print(f"Total: {total}")
+
+
 if __name__ == "__main__":
-    main()
+    if dataset_type == "vcr":
+        vcr_main()
+
+    elif dataset_type == "vqa":
+        vqa_main()
 
 
-# python3 -W ignore main.py --annots_dir data/vcr1annots --image_dir data/vcr1images
+# python3 -W ignore main.py --annots_dir data/vcr1annots --image_dir data/vcr1images --dataset vcr
+# python3 -W ignore main.py --annots_dir data/vqa_v2 --image_dir data/vqa_v2 --dataset vqa
