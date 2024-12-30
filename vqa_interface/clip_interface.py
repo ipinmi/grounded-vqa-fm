@@ -6,13 +6,6 @@ import torch
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32")
-preprocessor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
-
-device = "cuda" if torch.cuda.is_available() else "cpu"
-
-model.to(device)
-
 
 def run_CLIP_on_VCR(dataloader: DataLoader):
     """
@@ -30,6 +23,13 @@ def run_CLIP_on_VCR(dataloader: DataLoader):
         - correct_answer (str): The correct answer.
         - correct_index (int): The index of the correct answer.
     """
+
+    model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32")
+    preprocessor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
+
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+
+    model.to(device)
 
     results = {}
     for idx, batch in enumerate(tqdm(dataloader)):
@@ -102,6 +102,13 @@ def run_CLIP_on_VQA(dataloader: DataLoader):
         - question (str): The question.
         - predicted_label (list): The predicted label = 1 if the probability is greater than 0.5. Otherwise, 0.
     """
+
+    model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32")
+    preprocessor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
+
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+
+    model.to(device)
 
     results = []
 
