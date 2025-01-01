@@ -3,54 +3,68 @@ from torch.utils.data import Dataset, DataLoader
 
 
 # Load questions and annotations (answers)
-def load_vqa_data(filepath: str):
+from collections import defaultdict, Counter
+import json
+
+
+def load_vqa_data(filepath: str, top_k: int = 1000, max_pairs: int = 3999):
     """
     Load the VQA dataset from the given filepath for the downloaded images.
 
     Args:
-        filepath: path to the directory containing the VQA dataset
+        filepath: Path to the directory containing the VQA dataset.
+        top_k: The number of most frequent answers to keep for each type.
+        max_pairs: The maximum number of question-answer pairs to include.
 
     Returns:
-        qa_pairs: a dictionary of dictionaries, where each dictionary contains:
+        qa_pairs: A dictionary where each key is a question ID, and the value is a dictionary containing:
             - 'image_id': int
             - 'question': str
             - 'answer': str (primary answer to the question)
+            - 'question_type': str
+            - 'answer_type': str
+        possible_answers_by_type: A dictionary mapping answer types to their top-k answers.
     """
+    # Load questions and annotations
     with open(f"{filepath}/v2_OpenEnded_mscoco_val2014_questions.json", "r") as f:
         questions_data = json.load(f)
 
     with open(f"{filepath}/v2_mscoco_val2014_annotations.json", "r") as z:
         annotations_data = json.load(z)
 
-    # Combine questions and annotations into a dictionary
+    # Initialize data structures
     qa_pairs = {}
-    possible_answers_by_type = {}
-    i = 0
+    answers_by_type = defaultdict(list)
+
+    # Combine questions and annotations
     for q, a in zip(questions_data["questions"], annotations_data["annotations"]):
         question_id = q["question_id"]
         qa_pairs[question_id] = {
             "image_id": q["image_id"],
             "question": q["question"],
             "question_type": a["question_type"],
-            "answer": a["multiple_choice_answer"],  # Use the primary answer
+            "answer": a["multiple_choice_answer"],
             "answer_type": a["answer_type"],
         }
+        answers_by_type[a["answer_type"]].append(a["multiple_choice_answer"])
 
-        if a["answer_type"] not in possible_answers_by_type:
-            possible_answers_by_type[a["answer_type"]] = []
+    # Select the top-k answers for each type
+    possible_answers_by_type = {
+        answer_type: [answer for answer, _ in Counter(answers).most_common(top_k)]
+        for answer_type, answers in answers_by_type.items()
+    }
 
-        possible_answers_by_type[a["answer_type"]].append(a["multiple_choice_answer"])
+    # Filter qa_pairs to include only those with top-k answers
+    filtered_qa_pairs = {
+        q_id: data
+        for q_id, data in qa_pairs.items()
+        if data["answer"] in possible_answers_by_type[data["answer_type"]]
+    }
 
-        i += 1
+    # Select based on max_pairs
+    reduced_qa_pairs = dict(list(filtered_qa_pairs.items())[:max_pairs])
 
-        if i == 3999:
-            break
-
-    # set of all unique answers
-    for key in possible_answers_by_type:
-        possible_answers_by_type[key] = list(set(possible_answers_by_type[key]))
-
-    return qa_pairs, possible_answers_by_type
+    return reduced_qa_pairs, possible_answers_by_type
 
 
 class VQADataset(Dataset):

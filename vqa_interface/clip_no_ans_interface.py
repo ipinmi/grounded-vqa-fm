@@ -93,27 +93,29 @@ def test_CLIP_on_VCR(dataloader: DataLoader):
     return results
 
 
-def test_CLIP_on_VQA(dataloader: DataLoader, dataset: Dataset, save_tensor=True):
+def test_CLIP_on_VQA(dataloader: DataLoader, dataset: Dataset):
     """
     Test the CLIP model on a batch of VQA V2 data without passing the answer to the model.
 
     Args:
     dataloader (DataLoader): A DataLoader object containing the VQA data.
     dataset (Dataset): A VQADataset object containing the VQA data and answer types.
-    save_tensor (bool): A flag to create and save the tensor representations of answers, if not already saved.
 
     Returns:
     results (list): A list of dictionaries containing the following keys:
         - annot_id (int): The annotation ID.
         - question (str): The question.
-        - predicted_label (list): The predicted label = 1 if the probability is greater than 0.5. Otherwise, 0.
+        - predicted_idx (list): The predicted index.
+        - similarity (float): The similarity score.
+        - answer_type (str): The answer type.
     """
 
     results = []
     total_correct = 0
     type_correct = {key: 0 for key in dataset.answers_by_type.keys()}
+    type_total = {key: 0 for key in dataset.answers_by_type.keys()}
 
-    # answer types: yes/no, number, other
+    # Answer types: yes/no, number, other
     possible_answers = dataset.answers_by_type
 
     # Tokenize and normalize the answer types
@@ -156,8 +158,9 @@ def test_CLIP_on_VQA(dataloader: DataLoader, dataset: Dataset, save_tensor=True)
         joint_features /= joint_features.norm(dim=-1, keepdim=True)
 
         # Iterate through each question in the batch
-        batch_results = []
         for i, answer_type in enumerate(answer_types):
+            type_total[answer_type] += 1  # Count occurrences of each type
+
             if answer_type == "yes/no":
                 similarity = joint_features[i] @ yes_no_features.T
             elif answer_type == "number":
@@ -170,11 +173,12 @@ def test_CLIP_on_VQA(dataloader: DataLoader, dataset: Dataset, save_tensor=True)
             # Extract the maximum similarity and the predicted index
             max_similarity, pred_idx = similarity.max(dim=-1)
 
+            # Check if the prediction matches the ground truth
             if pred_idx.item() == answer_index[i]:
                 type_correct[answer_type] += 1
                 total_correct += 1
 
-            batch_results.append(
+            results.append(
                 {
                     "annot_id": annot_ids[i],
                     "question": questions[i],
@@ -184,16 +188,18 @@ def test_CLIP_on_VQA(dataloader: DataLoader, dataset: Dataset, save_tensor=True)
                 }
             )
 
-        results.extend(batch_results)
+    # Calculate accuracy for each type and overall
+    total_accuracy = total_correct / len(results)
 
-        # calculate accuracy over each type of answer and overall
-        accuracy = total_correct / len(results)
+    for typ in type_correct:
+        if type_total[typ] > 0:  # Avoid division by zero
+            type_accuracy = type_correct[typ] / type_total[typ]
+            print(
+                f"Accuracy for {typ} answers: {type_accuracy:.2%} ({type_correct[typ]}/{type_total[typ]})"
+            )
+        else:
+            print(f"No questions of type {typ} were found.")
 
-        for typ in type_correct:
-            type_accuracy = type_correct[typ] / len(possible_answers[typ])
-            print(f"Accuracy for {typ} answers: {type_accuracy}")
-            print(f"Total correct for {typ} answers: {type_correct[typ]}")
-            print("--------------------------------------------")
+    print(f"Overall accuracy: {total_accuracy:.2%} ({total_correct}/{len(results)})")
 
-        print(f"Total accuracy: {accuracy}")
     return results
