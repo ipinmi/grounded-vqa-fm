@@ -25,6 +25,7 @@ def load_vqa_data(filepath: str):
     # Combine questions and annotations into a dictionary
     qa_pairs = {}
     possible_answers_by_type = {}
+    i = 0
     for q, a in zip(questions_data["questions"], annotations_data["annotations"]):
         question_id = q["question_id"]
         qa_pairs[question_id] = {
@@ -39,7 +40,6 @@ def load_vqa_data(filepath: str):
             possible_answers_by_type[a["answer_type"]] = []
 
         possible_answers_by_type[a["answer_type"]].append(a["multiple_choice_answer"])
-
     # set of all unique answers
     for key in possible_answers_by_type:
         possible_answers_by_type[key] = list(set(possible_answers_by_type[key]))

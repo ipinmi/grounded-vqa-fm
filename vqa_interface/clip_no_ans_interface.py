@@ -117,29 +117,18 @@ def test_CLIP_on_VQA(dataloader: DataLoader, dataset: Dataset, save_tensor=True)
     possible_answers = dataset.answers_by_type
 
     # Tokenize and normalize the answer types
-    if save_tensor:
-        with torch.no_grad():
-            yes_no_ans = clip.tokenize(possible_answers["yes/no"]).to(device)
-            number_ans = clip.tokenize(possible_answers["number"]).to(device)
-            other_ans = clip.tokenize(possible_answers["other"]).to(device)
+    with torch.no_grad():
+        yes_no_ans = clip.tokenize(possible_answers["yes/no"]).to(device)
+        number_ans = clip.tokenize(possible_answers["number"]).to(device)
+        other_ans = clip.tokenize(possible_answers["other"]).to(device)
 
-            yes_no_features = model.encode_text(yes_no_ans)
-            number_features = model.encode_text(number_ans)
-            other_features = model.encode_text(other_ans)
+        yes_no_features = model.encode_text(yes_no_ans)
+        number_features = model.encode_text(number_ans)
+        other_features = model.encode_text(other_ans)
 
-            yes_no_features /= yes_no_features.norm(dim=-1, keepdim=True)
-            number_features /= number_features.norm(dim=-1, keepdim=True)
-            other_features /= other_features.norm(dim=-1, keepdim=True)
-
-            # Save the tensor representations
-            torch.save(yes_no_features, "features/yes_no_features.pt")
-            torch.save(number_features, "features/number_features.pt")
-            torch.save(other_features, "features/other_features.pt")
-
-    else:
-        yes_no_features = torch.load("features/yes_no_features.pt").to(device)
-        number_features = torch.load("features/number_features.pt").to(device)
-        other_features = torch.load("features/other_features.pt").to(device)
+        yes_no_features /= yes_no_features.norm(dim=-1, keepdim=True)
+        number_features /= number_features.norm(dim=-1, keepdim=True)
+        other_features /= other_features.norm(dim=-1, keepdim=True)
 
     for idx, batch in enumerate(tqdm(dataloader)):
         annot_ids = batch["annot_id"].detach().numpy()

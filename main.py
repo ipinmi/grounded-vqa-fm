@@ -71,7 +71,7 @@ answer_mode = args.ans_mode
 subprocess.run(["mkdir", "-p", results_path])
 
 # make feature directory
-subprocess.run(["mkdir", "-p", "vqa_interface/features"])
+# subprocess.run(["mkdir", "-p", "vqa_interface/features"])
 
 
 def save_json(data, path):
@@ -124,7 +124,7 @@ def vqa_main():
         print(f"Accuracy: {accuracy}")
         print(f"Number of accurate results: {pred_value_1}")
         print(f"Total: {total}")
-    else:
+    elif answer_mode == "no_ans":
         vqa_results = test_CLIP_on_VQA(dataloader, dataset=dataset, save_tensor=True)
         save_json(vqa_results, "results/clip_vqa_results_no_ans.json")
 
