@@ -40,6 +40,12 @@ def load_vqa_data(filepath: str):
             possible_answers_by_type[a["answer_type"]] = []
 
         possible_answers_by_type[a["answer_type"]].append(a["multiple_choice_answer"])
+
+        i += 1
+
+        if i == 3999:
+            break
+
     # set of all unique answers
     for key in possible_answers_by_type:
         possible_answers_by_type[key] = list(set(possible_answers_by_type[key]))
