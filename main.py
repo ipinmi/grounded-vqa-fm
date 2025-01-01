@@ -67,7 +67,11 @@ results_path = args.results_path
 dataset_type = args.dataset
 answer_mode = args.ans_mode
 
+# make results directory
 subprocess.run(["mkdir", "-p", results_path])
+
+# make feature directory
+subprocess.run(["mkdir", "-p", "vqa_interface/features"])
 
 
 def save_json(data, path):
@@ -121,7 +125,7 @@ def vqa_main():
         print(f"Number of accurate results: {pred_value_1}")
         print(f"Total: {total}")
     else:
-        vqa_results = test_CLIP_on_VQA(dataloader)
+        vqa_results = test_CLIP_on_VQA(dataloader, dataset=dataset, save_tensor=True)
         save_json(vqa_results, "results/clip_vqa_results_no_ans.json")
 
 
@@ -133,5 +137,5 @@ if __name__ == "__main__":
         vqa_main()
 
 
-# python3 -W ignore main.py --annots_dir data/vcr1annots --image_dir data/vcr1images --dataset vcr
-# python3 -W ignore main.py --annots_dir data/vqa_v2 --image_dir data/vqa_v2 --dataset vqa
+# python3 -W ignore main.py --annots_dir data/vcr1annots --image_dir data/vcr1images --dataset vcr --ans_mode no_ans
+# python3 -W ignore main.py --annots_dir data/vqa_v2 --image_dir data/vqa_v2 --dataset vqa --ans_mode no_ans

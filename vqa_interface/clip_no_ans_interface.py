@@ -132,9 +132,14 @@ def test_CLIP_on_VQA(dataloader: DataLoader, dataset: Dataset, save_tensor=True)
             other_features /= other_features.norm(dim=-1, keepdim=True)
 
             # Save the tensor representations
-            torch.save(yes_no_features, "yes_no_features.pt")
-            torch.save(number_features, "number_features.pt")
-            torch.save(other_features, "other_features.pt")
+            torch.save(yes_no_features, "features/yes_no_features.pt")
+            torch.save(number_features, "features/number_features.pt")
+            torch.save(other_features, "features/other_features.pt")
+
+    else:
+        yes_no_features = torch.load("features/yes_no_features.pt").to(device)
+        number_features = torch.load("features/number_features.pt").to(device)
+        other_features = torch.load("features/other_features.pt").to(device)
 
     for idx, batch in enumerate(tqdm(dataloader)):
         annot_ids = batch["annot_id"].detach().numpy()
