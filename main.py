@@ -6,11 +6,14 @@ from torch.utils.data import DataLoader
 
 
 ##MODULES
-from vqa_interface.clip_interface import (
+from vqa_interface.clip_orig_interface import (
     run_CLIP_on_VCR,
     run_CLIP_on_VQA,
     eval_on_accuracy,
 )
+
+from vqa_interface.clip_no_ans_interface import test_CLIP_on_VQA
+
 from vcr_data.vcr_dataloader import (
     VCRDataExtractor,
     VCRDataset,
@@ -50,11 +53,19 @@ parser.add_argument(
     required=True,
 )
 
+parser.add_argument(
+    "--ans_mode",
+    help="Answer or No Answer mode",
+    default="answer",
+    required=True,
+)
+
 args = parser.parse_args()
 ANNOTS_DIR = args.annots_dir
 IMAGES_DIR = args.image_dir
 results_path = args.results_path
 dataset_type = args.dataset
+answer_mode = args.ans_mode
 
 subprocess.run(["mkdir", "-p", results_path])
 
@@ -78,6 +89,7 @@ def vcr_main():
     dataloader = VCRDataLoader(dataset, batch_sampler=batch_sampler)
 
     # Run the CLIP model
+    print("Running CLIP on VCR data...\n")
     vcr_results = run_CLIP_on_VCR(dataloader)
     save_json(vcr_results, "results/clip_vcr_results.json")
     # print(vqa_results)
@@ -90,22 +102,27 @@ def vcr_main():
 
 
 def vqa_main():
-    batchSize = 1
-    qa_pairs = load_vqa_data(ANNOTS_DIR)
+    batchSize = 4
+    qa_pairs, possible_answers_by_type = load_vqa_data(ANNOTS_DIR)
     # Create dataset and dataloader
-    dataset = VQADataset(qa_pairs, ANNOTS_DIR)
+    dataset = VQADataset(qa_pairs, ANNOTS_DIR, possible_answers_by_type)
     dataloader = DataLoader(dataset, batch_size=batchSize, shuffle=True)
 
     # Run the CLIP model on VQA V2 data
-    vqa_results = run_CLIP_on_VQA(dataloader)
-    save_json(vqa_results, "results/clip_vqa_results.json")
+    print("Running CLIP on VQA V2 data...\n")
+    if answer_mode == "answer":
+        vqa_results = run_CLIP_on_VQA(dataloader)
+        save_json(vqa_results, "results/clip_vqa_results.json")
 
-    # Evaluate the model
-    accuracy = eval_on_accuracy(vqa_results, dataset_type)
-    accuracy, pred_value_1, total = eval_on_accuracy(vqa_results, dataset_type)
-    print(f"Accuracy: {accuracy}")
-    print(f"Number of accurate results: {pred_value_1}")
-    print(f"Total: {total}")
+        # Evaluate the model
+        accuracy = eval_on_accuracy(vqa_results, dataset_type)
+        accuracy, pred_value_1, total = eval_on_accuracy(vqa_results, dataset_type)
+        print(f"Accuracy: {accuracy}")
+        print(f"Number of accurate results: {pred_value_1}")
+        print(f"Total: {total}")
+    else:
+        vqa_results = test_CLIP_on_VQA(dataloader)
+        save_json(vqa_results, "results/clip_vqa_results_no_ans.json")
 
 
 if __name__ == "__main__":
