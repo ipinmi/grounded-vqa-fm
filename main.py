@@ -98,11 +98,11 @@ def vcr_main():
     save_json(vcr_results, "results/clip_vcr_results.json")
     # print(vqa_results)
 
-    # Evaluate the model
+    """# Evaluate the model
     accuracy, pred_value_1, total = eval_on_accuracy(vcr_results, dataset_type)
     print(f"Accuracy: {accuracy}")
     print(f"No of times Predicted value is 1: {pred_value_1}")
-    print(f"Total: {total}")
+    print(f"Total: {total}")"""
 
 
 def vqa_main():
@@ -118,12 +118,14 @@ def vqa_main():
         vqa_results = run_CLIP_on_VQA(dataloader)
         save_json(vqa_results, "results/clip_vqa_results.json")
 
+        """
         # Evaluate the model
         accuracy = eval_on_accuracy(vqa_results, dataset_type)
         accuracy, pred_value_1, total = eval_on_accuracy(vqa_results, dataset_type)
         print(f"Accuracy: {accuracy}")
         print(f"Number of accurate results: {pred_value_1}")
-        print(f"Total: {total}")
+        print(f"Total: {total}")"""
+
     elif answer_mode == "no_ans":
         vqa_results = test_CLIP_on_VQA(dataloader, dataset=dataset)
         save_json(vqa_results, "results/clip_vqa_results_no_ans.json")

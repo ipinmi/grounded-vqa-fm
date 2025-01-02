@@ -30,6 +30,8 @@ def run_CLIP_on_VCR(dataloader: DataLoader):
     """
 
     results = {}
+    correct = 0
+
     for idx, batch in enumerate(tqdm(dataloader)):
 
         annot_id, image_paths, questions, answers, labels, detections = batch
@@ -81,6 +83,10 @@ def run_CLIP_on_VCR(dataloader: DataLoader):
             # "predicted_label": predicted_probs.tolist(),  # label to one-hot sequence
             # "expected_label": labels, label sequence
 
+            # Check if the predicted label is correct
+            if (predicted_labels + 1) == labels.index(1) + 1:
+                correct += 1
+
             results[annot_id[0]] = {
                 "question": questions[0],  # Assuming one question per image
                 "predicted_answer": answers[highest_prob_idx],  # The predicted answer
@@ -88,7 +94,13 @@ def run_CLIP_on_VCR(dataloader: DataLoader):
                 "correct_answer": answers[labels.index(1)],  # The correct answer
                 "correct_index": int(labels.index(1) + 1),  # Index to label
             }
+    # Calculate accuracy
+    if correct == 0:
+        accuracy = 0.0
+    else:
+        accuracy = correct / len(results)
 
+    print(f"Accuracy over the VCR data with access to answers: {accuracy}")
     return results
 
 
@@ -107,6 +119,7 @@ def run_CLIP_on_VQA(dataloader: DataLoader):
     """
 
     results = []
+    correct = 0
 
     for idx, batch in enumerate(tqdm(dataloader)):
         annot_ids = batch["annot_id"].detach().numpy()
@@ -144,6 +157,9 @@ def run_CLIP_on_VQA(dataloader: DataLoader):
             predicted_labels = predicted_labels.tolist()
 
         for i, annot_id in enumerate(annot_ids):
+            if predicted_labels[i] == 1:
+                correct += 1
+
             results.append(
                 {
                     "annot_id": int(annot_id),
@@ -154,9 +170,12 @@ def run_CLIP_on_VQA(dataloader: DataLoader):
                     "answer_type": answer_types[i],
                 }
             )
+    if correct == 0:
+        accuracy = 0.0
+    else:
+        accuracy = correct / len(results)
 
-        if idx == 10:
-            break
+    print(f"Accuracy over the VQA V2 data with access to answers: {accuracy}")
 
     return results
 
