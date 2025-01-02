@@ -5,14 +5,14 @@ from torch.utils.data import DataLoader
 
 
 ##MODULES
-from dataloaders.vcr_dataloader import (
+from data_loading.vcr_dataloader import (
     VCRDataExtractor,
     VCRDataset,
     VCRDataLoader,
     BatchSampler,
 )
 
-from dataloaders.vqa_dataloader import load_vqa_data, VQADataset
+from data_loading.vqa_dataloader import load_vqa_data, VQADataset
 
 # Baseline VQA CLIP models on VCR and VQA V2
 from baseline_vqa.clip_orig_interface import (
