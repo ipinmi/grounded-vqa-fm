@@ -83,9 +83,11 @@ def train_linear(DATA_DIR, LEARN_RATE, batchSize=32, num_epochs=20):
 
     clip_model, preprocessor = clip.load("ViT-B/32", device=device)
 
-    # Load the VQA train dataset and select the top 1500 answers from each answer type
+    # Load the VQA train dataset and select the top k answers from each answer type
+    # train questions: 443,757 questions
+    # val questions: 214,354 questions
     train_qa_pairs, train_possible_answers_by_type, train_answers = load_vqa_data(
-        DATA_DIR, split="train", top_k=1500, max_pairs=10000
+        DATA_DIR, split="train", top_k=3000, max_pairs=100000
     )
     train_dataset = VQADataset(
         train_qa_pairs,
@@ -121,7 +123,9 @@ def train_linear(DATA_DIR, LEARN_RATE, batchSize=32, num_epochs=20):
             # Prepare the text inputs (questions) and image inputs
             question_toks = clip.tokenize(questions).to(device)
             images = [Image.open(image_path) for image_path in image_paths]
-            image_features = torch.stack([preprocessor(i) for i in images]).to(device)
+            image_features = torch.cat([preprocessor(i) for i in images], dim=0).to(
+                device
+            )
 
             # Forward pass
             outputs = model(question_toks, image_features)
