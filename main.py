@@ -5,14 +5,6 @@ from torch.utils.data import DataLoader
 
 
 ##MODULES
-from baseline_vqa.clip_orig_interface import (
-    run_CLIP_on_VCR,
-    run_CLIP_on_VQA,
-    eval_on_accuracy,
-)
-
-from baseline_vqa.clip_no_ans_interface import test_CLIP_on_VQA
-
 from dataloaders.vcr_dataloader import (
     VCRDataExtractor,
     VCRDataset,
@@ -22,7 +14,14 @@ from dataloaders.vcr_dataloader import (
 
 from dataloaders.vqa_dataloader import load_vqa_data, VQADataset
 
-# from clip_detector.object_detector import *
+# Baseline VQA CLIP models on VCR and VQA V2
+from baseline_vqa.clip_orig_interface import (
+    run_CLIP_on_VCR,
+    run_CLIP_on_VQA,
+    eval_on_accuracy,
+)
+
+from baseline_vqa.clip_no_ans_interface import test_CLIP_on_VQA
 
 ####
 # Arguments for data preprocessing and loading
@@ -69,9 +68,6 @@ answer_mode = args.ans_mode
 # make results directory
 subprocess.run(["mkdir", "-p", results_path])
 
-# make feature directory
-# subprocess.run(["mkdir", "-p", "vqa_interface/features"])
-
 
 def save_json(data, path):
     with open(path, "w") as f:
@@ -97,12 +93,6 @@ def vcr_main():
     save_json(vcr_results, "results/clip_vcr_results.json")
     # print(vqa_results)
 
-    """# Evaluate the model
-    accuracy, pred_value_1, total = eval_on_accuracy(vcr_results, dataset_type)
-    print(f"Accuracy: {accuracy}")
-    print(f"No of times Predicted value is 1: {pred_value_1}")
-    print(f"Total: {total}")"""
-
 
 def vqa_main():
     batchSize = 4
@@ -116,14 +106,6 @@ def vqa_main():
     if answer_mode == "answer":
         vqa_results = run_CLIP_on_VQA(dataloader)
         save_json(vqa_results, "results/clip_vqa_results.json")
-
-        """
-        # Evaluate the model
-        accuracy = eval_on_accuracy(vqa_results, dataset_type)
-        accuracy, pred_value_1, total = eval_on_accuracy(vqa_results, dataset_type)
-        print(f"Accuracy: {accuracy}")
-        print(f"Number of accurate results: {pred_value_1}")
-        print(f"Total: {total}")"""
 
     elif answer_mode == "no_ans":
         vqa_results = test_CLIP_on_VQA(dataloader, dataset=dataset)

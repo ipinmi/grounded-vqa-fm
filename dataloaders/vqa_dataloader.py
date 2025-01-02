@@ -1,18 +1,19 @@
 import json
 from torch.utils.data import Dataset, DataLoader
-
+import random
 
 # Load questions and annotations (answers)
 from collections import defaultdict, Counter
 import json
 
 
-def load_vqa_data(filepath: str, top_k: int = 1000, max_pairs: int = 3999):
+def load_vqa_data(filepath: str, split: str, top_k: int = 1000, max_pairs: int = 3999):
     """
     Load the VQA dataset from the given filepath for the downloaded images.
 
     Args:
         filepath: Path to the directory containing the VQA dataset.
+        split: The split of the dataset to load (e.g., 'val', 'train', 'test').
         top_k: The number of most frequent answers to keep for each type.
         max_pairs: The maximum number of question-answer pairs to include.
 
@@ -26,15 +27,16 @@ def load_vqa_data(filepath: str, top_k: int = 1000, max_pairs: int = 3999):
         possible_answers_by_type: A dictionary mapping answer types to their top-k answers.
     """
     # Load questions and annotations
-    with open(f"{filepath}/v2_OpenEnded_mscoco_val2014_questions.json", "r") as f:
+    with open(f"{filepath}/v2_OpenEnded_mscoco_{split}2014_questions.json", "r") as f:
         questions_data = json.load(f)
 
-    with open(f"{filepath}/v2_mscoco_val2014_annotations.json", "r") as z:
+    with open(f"{filepath}/v2_mscoco_{split}2014_annotations.json", "r") as z:
         annotations_data = json.load(z)
 
     # Initialize data structures
     qa_pairs = {}
     answers_by_type = defaultdict(list)
+    all_answers = []
 
     # Combine questions and annotations
     for q, a in zip(questions_data["questions"], annotations_data["annotations"]):
@@ -64,19 +66,27 @@ def load_vqa_data(filepath: str, top_k: int = 1000, max_pairs: int = 3999):
     # Select based on max_pairs
     reduced_qa_pairs = dict(list(filtered_qa_pairs.items())[:max_pairs])
 
-    return reduced_qa_pairs, possible_answers_by_type
+    # Get the joint set of possible answers
+    for answers in possible_answers_by_type.values():
+        all_answers.extend(answers)
+
+    random.shuffle(all_answers)
+
+    return reduced_qa_pairs, possible_answers_by_type, all_answers
 
 
 class VQADataset(Dataset):
-    def __init__(self, data, filepath, answers_by_type):
+    def __init__(self, data, split, filepath, answers_by_type, all_answers):
         """
         Args:
             data: a dictionary of dictionaries, where each dictionary contains:
                 - 'question': str
                 - 'answer': str (answer to the question)
                 - 'image_id':id of the image
+            split: The split of the dataset to load (e.g., 'val', 'train', 'test').
             filepath: path to the directory containing the images
             answers_by_type: a dictionary containing the set of possible answers for each answer type
+            all_answers: a list of all possible answers from all answer types
         """
         self.data = data
         self.filepath = filepath
@@ -99,7 +109,8 @@ class VQADataset(Dataset):
             question = instance["question"]
             answer = instance["answer"]
             answer_type = instance["answer_type"]
-            answer_idx = self.answer_index[answer_type][answer]
+            answer_type_idx = self.answer_index[answer_type][answer]
+            answer_idx = all_answers.index(answer)
 
             # Add the image full path
             if len(str(image_id)) < 12:
@@ -107,7 +118,7 @@ class VQADataset(Dataset):
 
                 assert len(image_id) == 12
 
-            image_path = f"{self.filepath}/val2014/COCO_val2014_{image_id}.jpg"
+            image_path = f"{self.filepath}/{split}2014/COCO_{split}2014_{image_id}.jpg"
 
             self.dataset.append(
                 {
@@ -116,6 +127,7 @@ class VQADataset(Dataset):
                     "answer": answer,
                     "image_path": image_path,
                     "answer_type": answer_type,
+                    "answer_type_idx": answer_type_idx,
                     "answer_idx": answer_idx,
                 }
             )
