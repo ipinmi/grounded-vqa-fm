@@ -4,8 +4,8 @@ import json
 
 
 ##MODULES
-from vqa_interface.clip_interface import run_CLIP
-from vcr_data.vcr_dataloader import VCRDataExtractor, VCRDataset, VCRDataLoader
+from baseline_vqa.clip_interface import run_CLIP_on_VCR
+from dataloaders.vcr_dataloader import VCRDataExtractor, VCRDataset, VCRDataLoader
 from clip_detector.object_detector import *
 
 ####

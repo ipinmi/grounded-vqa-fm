@@ -1,27 +1,26 @@
 import argparse
-import matplotlib.pyplot as plt
 import json
 import subprocess
 from torch.utils.data import DataLoader
 
 
 ##MODULES
-from vqa_interface.clip_orig_interface import (
+from baseline_vqa.clip_orig_interface import (
     run_CLIP_on_VCR,
     run_CLIP_on_VQA,
     eval_on_accuracy,
 )
 
-from vqa_interface.clip_no_ans_interface import test_CLIP_on_VQA
+from baseline_vqa.clip_no_ans_interface import test_CLIP_on_VQA
 
-from vcr_data.vcr_dataloader import (
+from dataloaders.vcr_dataloader import (
     VCRDataExtractor,
     VCRDataset,
     VCRDataLoader,
     BatchSampler,
 )
 
-from vqa_data.vqa_dataloader import load_vqa_data, VQADataset
+from dataloaders.vqa_dataloader import load_vqa_data, VQADataset
 
 # from clip_detector.object_detector import *
 
