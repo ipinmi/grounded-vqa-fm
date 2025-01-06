@@ -3,6 +3,12 @@ import torch.nn as nn
 
 
 class VCRLinearModel(nn.Module):
+    """
+    Defines the linear model for the VCR classification task using the CLIP model.
+    The model takes an image, a question, and the mutliple choice answers as input
+    and outputs the probabilities of the choices.
+    """
+
     def __init__(self, clip_model, num_choices, hidden_size=512, drop_out=0.5):
         super(VCRLinearModel, self).__init__()
         self.hidden_size = hidden_size
@@ -57,6 +63,12 @@ class VCRLinearModel(nn.Module):
 
 
 class VQALinearModel(nn.Module):
+    """
+    Defines the linear model for the VQA classification task using the CLIP model.
+    The model takes an image and a question as input and
+    outputs the probabilities over the selected number of answers from each answer type.
+    """
+
     def __init__(self, clip_model, num_answers, hidden_size=512, drop_out=0.5):
         super(VQALinearModel, self).__init__()
         self.hidden_size = hidden_size

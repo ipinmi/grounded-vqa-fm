@@ -15,13 +15,13 @@ from data_loading.vcr_dataloader import (
 from data_loading.vqa_dataloader import load_vqa_data, VQADataset
 
 # Baseline VQA CLIP models on VCR and VQA V2
-from baseline_vqa.clip_orig_interface import (
+from zero_shot_clip.clip_orig_interface import (
     run_CLIP_on_VCR,
     run_CLIP_on_VQA,
     eval_on_accuracy,
 )
 
-from baseline_vqa.clip_no_ans_interface import test_CLIP_on_VQA
+from zero_shot_clip.clip_no_ans_interface import test_CLIP_on_VQA
 
 ####
 # Arguments for data preprocessing and loading

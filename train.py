@@ -332,5 +332,5 @@ if __name__ == "__main__":
         raise ValueError("Dataset type not recognized")
 
 
-# Sample usage: python3 train.py --annots_dir data/vcr1annots --image_dir data/vcr1images --learn_rate 0.001
-# Sample usage: python3 train.py --data_dir data/vqa_v2 --learn_rate 0.001
+# Sample usage: python3 train.py --annots_dir data/vcr1annots --image_dir data/vcr1images --learn_rate 0.001 --dataset vcr
+# Sample usage: python3 train.py --data_dir data/vqa_v2 --learn_rate 0.001 --dataset vqa

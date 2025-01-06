@@ -4,7 +4,7 @@ import json
 
 
 ##MODULES
-from baseline_vqa.clip_interface import run_CLIP_on_VCR
+from zero_shot_clip.clip_interface import run_CLIP_on_VCR
 from data_loading.vcr_dataloader import VCRDataExtractor, VCRDataset, VCRDataLoader
 from clip_detector.object_detector import *
 
