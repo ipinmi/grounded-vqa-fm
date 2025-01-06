@@ -72,7 +72,7 @@ def load_vqa_data(filepath: str, split: str, top_k: int = 1000, max_pairs: int =
 
     random.shuffle(all_answers)
 
-    return reduced_qa_pairs, possible_answers_by_type, all_answers
+    return reduced_qa_pairs, possible_answers_by_type, all_answers, answers_by_type
 
 
 class VQADataset(Dataset):

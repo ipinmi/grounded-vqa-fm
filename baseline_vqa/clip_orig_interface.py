@@ -64,7 +64,7 @@ def run_CLIP_on_VCR(dataloader: DataLoader):
             # Compute the similarity between the text and image features
             logits_per_image, logits_per_text = model(
                 image, text_input
-            )  # Shape: [num_images, num_text_pairs]
+            )  # Shape: [num_images, num_text_pairs] e.g. [1,4]
 
             # Softmax to get probabilities
             batch_probs = logits_per_image.softmax(dim=-1).squeeze(0).cpu().numpy()
@@ -94,6 +94,7 @@ def run_CLIP_on_VCR(dataloader: DataLoader):
                 "correct_answer": answers[labels.index(1)],  # The correct answer
                 "correct_index": int(labels.index(1) + 1),  # Index to label
             }
+
     # Calculate accuracy
     if correct == 0:
         accuracy = 0.0

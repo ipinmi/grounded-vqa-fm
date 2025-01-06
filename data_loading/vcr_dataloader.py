@@ -272,7 +272,7 @@ class VCRDataExtractor(Dataset):
 
 
 class VCRDataset(Dataset):
-    def __init__(self, data, objective="vqa"):
+    def __init__(self, data, objective="vqa", size=1000):
         """
         Args:
             data: List of dictionaries, where each dictionary contains:
@@ -315,6 +315,9 @@ class VCRDataset(Dataset):
                 }
                 for idx, answer in enumerate(answers)
             )
+
+        # Limit the dataset size
+        self.data = self.data[:size]
 
     def __len__(self):
         return len(self.data)

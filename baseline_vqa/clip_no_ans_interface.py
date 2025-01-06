@@ -31,6 +31,8 @@ def test_CLIP_on_VCR(dataloader: DataLoader):
     """
 
     results = {}
+    correct = 0
+
     for idx, batch in enumerate(tqdm(dataloader)):
 
         annot_id, image_paths, questions, answers, labels, detections = batch
@@ -38,57 +40,51 @@ def test_CLIP_on_VCR(dataloader: DataLoader):
         # Assuming one image per batch, open and preprocess it
         image = preprocessor(Image.open(image_paths[0])).unsqueeze(0).to(device)
 
-        # Prepare the text inputs (questions paired with answers)
-        question_answers = [
-            f"{question} {answer}" for question, answer in zip(questions, answers)
-        ]
-        # Limit to 77 tokens to fit in the model
-        question_answers = [qa[:77] for qa in question_answers]
-
-        # Prepare the image inputs
-        # images = [image for _ in range(len(question_answers))]  # Repeat the image
-        # images = image.repeat(len(question_answers), 1, 1, 1)
-
-        text_input = clip.tokenize(question_answers).to(device)
-
         with torch.no_grad():
+            # Prepare and encode the possible multichoice answers (expected: 4)
+            encoded_answers = clip.tokenize(answers).to(device)  # shape: (4, 77)
+            answers_features = model.encode_text(encoded_answers).to(
+                device
+            )  # shape: (4, 512)
+            answers_features /= answers_features.norm(dim=-1, keepdim=True)
+
+            # encode the question
+            encoded_questions = clip.tokenize(questions[0]).to(device)  # shape: (1, 77)
+
             # Create inputs for the model
             image_features = model.encode_image(image)
-            text_features = model.encode_text(text_input)
+            question_features = model.encode_text(encoded_questions)
 
             # Normalize the features
             image_features /= image_features.norm(dim=-1, keepdim=True)
-            text_features /= text_features.norm(dim=-1, keepdim=True)
+            question_features /= question_features.norm(dim=-1, keepdim=True)
 
-            # Compute the similarity between the text and image features
-            logits_per_image, logits_per_text = model(
-                image, text_input
-            )  # Shape: [num_images, num_text_pairs]
+            # Combine and normalize the joint features
+            joint_features = question_features + image_features
+            joint_features /= joint_features.norm(dim=-1, keepdim=True)
 
-            # Softmax to get probabilities
-            batch_probs = logits_per_image.softmax(dim=-1).squeeze(0).cpu().numpy()
+            # Compute the similarity between the joint and answers features
+            similarity_array = joint_features @ answers_features.T
 
-            # Convert to one-hot encoded predictions
-            predicted_labels = np.argmax(
-                batch_probs
-            )  # Index of the highest probability
-            predicted_probs = np.zeros_like(batch_probs)
-            predicted_probs[predicted_labels] = 1
+            # Extract the maximum similarity and the predicted index
+            max_similarity, pred_idx = similarity_array.max(dim=-1)
 
-            # image_id = image_paths[0].replace("data/vcr1images/", "") # Map back to image ID
-            highest_prob_idx = np.argmax(predicted_probs)
-
-            # Store results
-            # "predicted_label": predicted_probs.tolist(),  # label to one-hot sequence
-            # "expected_label": labels, label sequence
+            if pred_idx.item() == labels.index(1):
+                correct += 1
 
             results[annot_id[0]] = {
                 "question": questions[0],  # Assuming one question per image
-                "predicted_answer": answers[highest_prob_idx],  # The predicted answer
-                "predicted_index": int(predicted_labels + 1),  # Index to label
+                "predicted_answer": answers[pred_idx],  # The predicted answer
+                "predicted_index": int(pred_idx.item() + 1),  # Index to label
+                "similarity": round(max_similarity.item(), 4),  # predicted similarity
                 "correct_answer": answers[labels.index(1)],  # The correct answer
                 "correct_index": int(labels.index(1) + 1),  # Index to label
             }
+
+    # Calculate accuracy
+    total_accuracy = correct / len(results)
+
+    print(f"Overall accuracy: {total_accuracy:.2%} ({correct}/{len(results)})")
 
     return results
 
@@ -96,6 +92,8 @@ def test_CLIP_on_VCR(dataloader: DataLoader):
 def test_CLIP_on_VQA(dataloader: DataLoader, dataset: Dataset):
     """
     Test the CLIP model on a batch of VQA V2 data without passing the answer to the model.
+    The question-answer pairs are grouped by answer type and the model is tested on each group.
+    The image + questions are encoded and compared for the most similar answer type.
 
     Args:
     dataloader (DataLoader): A DataLoader object containing the VQA data.
@@ -120,11 +118,13 @@ def test_CLIP_on_VQA(dataloader: DataLoader, dataset: Dataset):
 
     # Tokenize and normalize the answer types
     with torch.no_grad():
-        yes_no_ans = clip.tokenize(possible_answers["yes/no"]).to(device)
+        yes_no_ans = clip.tokenize(possible_answers["yes/no"]).to(
+            device
+        )  # shape: [no_of_possible_ans, 77]
         number_ans = clip.tokenize(possible_answers["number"]).to(device)
         other_ans = clip.tokenize(possible_answers["other"]).to(device)
 
-        yes_no_features = model.encode_text(yes_no_ans)
+        yes_no_features = model.encode_text(yes_no_ans)  # shape: [batch_size, 512]
         number_features = model.encode_text(number_ans)
         other_features = model.encode_text(other_ans)
 

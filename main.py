@@ -28,7 +28,7 @@ from baseline_vqa.clip_no_ans_interface import test_CLIP_on_VQA
 parser = argparse.ArgumentParser()
 parser.add_argument(
     "--annots_dir",
-    help="Directory path for annotations where train.jsonl, val.jsonl, test.jsonl are stored",
+    help="Directory path for annotations where the questions, answers and image ids are stored",
     default="data/vcr1annots",
     required=True,
 )
@@ -90,25 +90,33 @@ def vcr_main():
     # Run the CLIP model
     print("Running CLIP on VCR data...\n")
     vcr_results = run_CLIP_on_VCR(dataloader)
-    save_json(vcr_results, "results/clip_vcr_results.json")
-    # print(vqa_results)
+    # save_json(vcr_results, "results/clip_vcr_results.json")
+    print(vcr_results)
 
 
 def vqa_main():
-    batchSize = 4
-    qa_pairs, possible_answers_by_type = load_vqa_data(ANNOTS_DIR)
-    # Create dataset and dataloader
-    dataset = VQADataset(qa_pairs, ANNOTS_DIR, possible_answers_by_type)
-    dataloader = DataLoader(dataset, batch_size=batchSize, shuffle=True)
+    batchSize = 64
+    # Testing over the validation set of VQA V2
+    val_qa_pairs, val_possible_answers_by_type, val_answers = load_vqa_data(
+        ANNOTS_DIR, split="val", top_k=100, max_pairs=3000
+    )
+    val_dataset = VQADataset(
+        val_qa_pairs,
+        split="val",
+        filepath=ANNOTS_DIR,
+        answers_by_type=val_possible_answers_by_type,
+        all_answers=val_answers,
+    )
+    val_dataloader = DataLoader(val_dataset, batch_size=batchSize, shuffle=True)
 
     # Run the CLIP model on VQA V2 data
     print("Running CLIP on VQA V2 data...\n")
     if answer_mode == "answer":
-        vqa_results = run_CLIP_on_VQA(dataloader)
+        vqa_results = run_CLIP_on_VQA(val_dataloader)
         save_json(vqa_results, "results/clip_vqa_results.json")
 
     elif answer_mode == "no_ans":
-        vqa_results = test_CLIP_on_VQA(dataloader, dataset=dataset)
+        vqa_results = test_CLIP_on_VQA(val_dataloader, dataset=val_dataset)
         save_json(vqa_results, "results/clip_vqa_results_no_ans.json")
 
 
@@ -118,6 +126,9 @@ if __name__ == "__main__":
 
     elif dataset_type == "vqa":
         vqa_main()
+
+    else:
+        raise ValueError("Dataset type not recognized")
 
 
 # python3 -W ignore main.py --annots_dir data/vcr1annots --image_dir data/vcr1images --dataset vcr --ans_mode no_ans
