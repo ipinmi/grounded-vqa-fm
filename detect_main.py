@@ -2,6 +2,7 @@ import argparse
 import matplotlib.pyplot as plt
 import json
 
+# NOTE: update clip run on vcr to new file
 
 ##MODULES
 from zero_shot_clip.clip_interface import run_CLIP_on_VCR
