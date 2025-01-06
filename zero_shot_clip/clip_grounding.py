@@ -1,16 +1,16 @@
 # Code adapted from: https://github.com/hila-chefer/Transformer-MM-Explainability
 
 import torch
-import clip
+import CLIP.clip as clip  # modified CLIP model from the repository
 from PIL import Image
 import numpy as np
 import torch
 from torch.utils.data import DataLoader
 from tqdm import tqdm
-from clip.simple_tokenizer import SimpleTokenizer as _Tokenizer
-from captum.attr import visualization
+from CLIP.clip.simple_tokenizer import SimpleTokenizer as _Tokenizer
 import cv2
 import matplotlib.pyplot as plt
+from captum.attr import visualization
 
 
 #### START OF CODE ADAPTATION ####
@@ -31,7 +31,7 @@ class color:
 
 # Load the model
 device = "cuda" if torch.cuda.is_available() else "cpu"
-clip_model, preprocessor = clip.load("ViT-B/32", device=device, jit=False)
+model, preprocessor = clip.load("ViT-B/32", device=device, jit=False)
 
 # Transformer attention layers to consider
 # for text encoder
@@ -194,10 +194,60 @@ def show_image_with_bounding_boxes(image_relevance, image, orig_image, threshold
 #### END OF CODE ADAPTATION ####
 
 
+def get_prediction(image, text, model, choices=None):
+    """
+    Get the predicted label for the image-text pair.
+
+    Args:
+    image: torch.Tensor. The image tensor.
+    text: torch.Tensor. The text tensor.
+    model: torch.nn.Module. The CLIP model.
+
+    Returns:
+    predicted_label: int. The predicted label.
+
+    """
+    if choices is None:
+        logits_per_image, logits_per_text = model(image, text)
+        print(
+            color.BOLD
+            + color.BLUE
+            + color.UNDERLINE
+            + f"CLIP similarity score: {logits_per_image.item()}"
+            + color.END
+        )
+
+        # Softmax to get probabilities
+        batch_probs = logits_per_image.softmax(dim=-1).squeeze(0).cpu().numpy()
+
+        # Convert to one-hot encoded predictions
+        predicted_label = np.argmax(batch_probs)  # Index of the highest probability
+
+    else:
+        image_features = model.encode_image(image)
+        text_features = model.encode_text(text)
+
+        answers_features = model.encode_text(choices).to(device)  # shape: (4, 512)
+        answers_features /= answers_features.norm(dim=-1, keepdim=True)
+
+        # Normalize the features
+        image_features /= image_features.norm(dim=-1, keepdim=True)
+        text_features /= text_features.norm(dim=-1, keepdim=True)
+        answers_features /= answers_features.norm(dim=-1, keepdim=True)
+
+        joint_features = text_features + image_features
+
+        # Compute the similarity between the joint and answers features
+        similarity_array = joint_features @ answers_features.T
+
+        _, predicted_label = similarity_array.max(dim=-1)
+
+    return predicted_label
+
+
 def attention_visualizaton(
     dataloader,
     model,
-    predicted_label: int,
     mode: str = "answer",
     num_samples: int = 10,
     num_objects: list = [3, 5, 7, 10],
@@ -219,39 +269,45 @@ def attention_visualizaton(
     """
     bounding_results = {}  # store bounding box values
 
-    for batch in tqdm(dataloader):
+    for idx, batch in enumerate(tqdm(dataloader)):
         annot_id, image_paths, questions, choices, labels, detections = batch
 
         # Assuming one image per batch, load and preprocess it
         img_path = image_paths[0]
         image = preprocessor(Image.open(img_path)).unsqueeze(0).to(device)
 
-        if predicted_label == labels.index(1):
-            focus_choices = [choices[labels.index(1)]]  # for correct predictions
-        else:
-            focus_choices = [choices[predicted_label], choices[labels.index(1)]]
-
         # Prepare the text inputs (question and only the correct and predicted choices) and image inputs
         if mode == "answer":
             question_answers = [
-                f"{question} {answer}"
-                for question, answer in zip(questions, focus_choices)
-            ]  # shape:  (num of focus choices, 77)
+                f"{question} {answer}" for question, answer in zip(questions, choices)
+            ]  # shape: (num of choices, 77)
 
             # Limit to 77 tokens to fit in the model
             question_answers = [qa[:77] for qa in question_answers]
 
             text_input = clip.tokenize(question_answers).to(
                 device
-            )  # shape:  (num_choices, 77)
+            )  # shape: (num_choices, 77)
+
+            predicted_label = get_prediction(image, text_input, model, None)
 
         elif mode == "no_answer":
             question_tokens = clip.tokenize(questions[0]).to(device)  # shape: (1, 77)
-            choices_tokens = clip.tokenize(focus_choices).to(
+            choices_tokens = clip.tokenize(choices).to(
                 device
-            )  # shape: (num of focus choices, 77)
+            )  # shape: (num of choices, 77)
 
             text_input = question_tokens
+
+            predicted_label = get_prediction(image, text_input, model, choices_tokens)
+
+        # Select the predicted and correct choices for visualization
+        if predicted_label == labels.index(1):
+            text_input = text_input[predicted_label]
+        elif predicted_label < labels.index(1):
+            text_input = text_input[[predicted_label, labels.index(1)]]
+        else:
+            text_input = text_input[[labels.index(1), predicted_label]]
 
         # Interpret the model and visualize the attention maps
         R_text, R_image = interpret(model=model, image=image, texts=text_input)
@@ -272,4 +328,6 @@ def attention_visualizaton(
                 "pred_bounding_boxes": bounding_box,
             }
 
+        if idx == num_samples:
+            break
         # NOTE: create viz folder and save bounding box images, pass similarity score to function
