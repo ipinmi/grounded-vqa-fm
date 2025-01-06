@@ -7,16 +7,30 @@ import numpy as np
 import torch
 from torch.utils.data import DataLoader
 from tqdm import tqdm
-
 from clip.simple_tokenizer import SimpleTokenizer as _Tokenizer
-
-
 from captum.attr import visualization
 import cv2
 import matplotlib.pyplot as plt
 
-device = "cuda" if torch.cuda.is_available() else "cpu"
 
+#### START OF CODE ADAPTATION ####
+
+
+class color:
+    PURPLE = "\033[95m"
+    CYAN = "\033[96m"
+    DARKCYAN = "\033[36m"
+    BLUE = "\033[94m"
+    GREEN = "\033[92m"
+    YELLOW = "\033[93m"
+    RED = "\033[91m"
+    BOLD = "\033[1m"
+    UNDERLINE = "\033[4m"
+    END = "\033[0m"
+
+
+# Load the model
+device = "cuda" if torch.cuda.is_available() else "cpu"
 clip_model, preprocessor = clip.load("ViT-B/32", device=device, jit=False)
 
 # Transformer attention layers to consider
@@ -31,10 +45,23 @@ def interpret(
     image,
     texts,
     model,
-    device,
     vision_start_layer=vision_layer,
     text_start_layer=text_layer,
 ):
+    """
+    Interpret the model by calculating the relevance scores for the image and text inputs.
+
+    Args:
+    image (torch.Tensor): The image tensor.
+    texts (torch.Tensor): The text tensor.
+    model (torch.nn.Module): The CLIP model.
+    vision_start_layer (int): The starting layer for the vision encoder.
+    text_start_layer (int): The starting layer for the text encoder.
+
+    Returns:
+    text_relevance (torch.Tensor): The relevance scores for the text input.
+    image_relevance (torch.Tensor): The relevance scores for the image input.
+    """
     batch_size = texts.shape[0]
     images = image.repeat(batch_size, 1, 1, 1)
     logits_per_image, logits_per_text = model(images, texts)
@@ -105,6 +132,23 @@ def interpret(
     return text_relevance, image_relevance
 
 
+def show_heatmap_on_text(text, text_encoding, R_text):
+    _tokenizer = _Tokenizer()
+    CLS_idx = text_encoding.argmax(dim=-1)
+    R_text = R_text[CLS_idx, 1:CLS_idx]
+    text_scores = R_text / R_text.sum()
+    text_scores = text_scores.flatten()
+    print(text_scores)
+    text_tokens = _tokenizer.encode(text)
+    text_tokens_decoded = [_tokenizer.decode([a]) for a in text_tokens]
+    vis_data_records = [
+        visualization.VisualizationDataRecord(
+            text_scores, 0, 0, 0, 0, 0, text_tokens_decoded, 1
+        )
+    ]
+    visualization.visualize_text(vis_data_records)
+
+
 def show_image_with_bounding_boxes(image_relevance, image, orig_image, threshold=0.5):
     def show_cam_on_image(img, mask):
         heatmap = cv2.applyColorMap(np.uint8(255 * mask), cv2.COLORMAP_JET)
@@ -144,36 +188,88 @@ def show_image_with_bounding_boxes(image_relevance, image, orig_image, threshold
     axs[1].axis("off")
     plt.show()
 
-
-def show_heatmap_on_text(text, text_encoding, R_text):
-    _tokenizer = _Tokenizer()
-    CLS_idx = text_encoding.argmax(dim=-1)
-    R_text = R_text[CLS_idx, 1:CLS_idx]
-    text_scores = R_text / R_text.sum()
-    text_scores = text_scores.flatten()
-    print(text_scores)
-    text_tokens = _tokenizer.encode(text)
-    text_tokens_decoded = [_tokenizer.decode([a]) for a in text_tokens]
-    vis_data_records = [
-        visualization.VisualizationDataRecord(
-            text_scores, 0, 0, 0, 0, 0, text_tokens_decoded, 1
-        )
-    ]
-    visualization.visualize_text(vis_data_records)
+    # return bounding_boxes
 
 
-class color:
-    PURPLE = "\033[95m"
-    CYAN = "\033[96m"
-    DARKCYAN = "\033[36m"
-    BLUE = "\033[94m"
-    GREEN = "\033[92m"
-    YELLOW = "\033[93m"
-    RED = "\033[91m"
-    BOLD = "\033[1m"
-    UNDERLINE = "\033[4m"
-    END = "\033[0m"
+#### END OF CODE ADAPTATION ####
 
 
-def attention_viz():
-    pass
+def attention_visualizaton(
+    dataloader,
+    model,
+    predicted_label: int,
+    mode: str = "answer",
+    num_samples: int = 10,
+    num_objects: list = [3, 5, 7, 10],
+):
+    """
+    Visualize the attention maps for the text and image inputs using CLIP model.
+
+    Args:
+    dataloader: DataLoader object containing the data.
+    model: CLIP model.
+    predicted_label: int. the answer label predicted by the model.
+    mode: str, default "answer". Decides whether to include the answer in the text input or not.
+        Options: "answer" or "no answer".
+    num_samples: int, default 10. Number of samples to visualize.
+    num_objects: list, default [3, 5, 7, 10]. Number of relevant objects in the image for calculating the ROI accuracy.
+
+    Returns:
+
+    """
+    bounding_results = {}  # store bounding box values
+
+    for batch in tqdm(dataloader):
+        annot_id, image_paths, questions, choices, labels, detections = batch
+
+        # Assuming one image per batch, load and preprocess it
+        img_path = image_paths[0]
+        image = preprocessor(Image.open(img_path)).unsqueeze(0).to(device)
+
+        if predicted_label == labels.index(1):
+            focus_choices = [choices[labels.index(1)]]  # for correct predictions
+        else:
+            focus_choices = [choices[predicted_label], choices[labels.index(1)]]
+
+        # Prepare the text inputs (question and only the correct and predicted choices) and image inputs
+        if mode == "answer":
+            question_answers = [
+                f"{question} {answer}"
+                for question, answer in zip(questions, focus_choices)
+            ]  # shape:  (num of focus choices, 77)
+
+            # Limit to 77 tokens to fit in the model
+            question_answers = [qa[:77] for qa in question_answers]
+
+            text_input = clip.tokenize(question_answers).to(
+                device
+            )  # shape:  (num_choices, 77)
+
+        elif mode == "no_answer":
+            question_tokens = clip.tokenize(questions[0]).to(device)  # shape: (1, 77)
+            choices_tokens = clip.tokenize(focus_choices).to(
+                device
+            )  # shape: (num of focus choices, 77)
+
+            text_input = question_tokens
+
+        # Interpret the model and visualize the attention maps
+        R_text, R_image = interpret(model=model, image=image, texts=text_input)
+        batch_size = text_input.shape[0]
+        for i in range(batch_size):
+            show_heatmap_on_text(text_input[i], text_input[i], R_text[i])
+            bounding_box = show_image_with_bounding_boxes(
+                R_image[i], image, orig_image=Image.open(img_path)
+            )
+            plt.show()
+
+            # save bounding box values in a json file
+            bounding_results[annot_id] = {
+                "question": questions[0],
+                "correct_answer": choices[labels.index(1)],
+                "image_path": img_path,
+                "orig_bounding_boxes": detections["boxes"],
+                "pred_bounding_boxes": bounding_box,
+            }
+
+        # NOTE: create viz folder and save bounding box images, pass similarity score to function

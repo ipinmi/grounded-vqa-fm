@@ -86,15 +86,11 @@ pip install git+https://github.com/openai/CLIP.git
 # Replace cudatoolkit=11.0 above with the appropriate CUDA version on your machine or cpuonly when installing on a machine without a GPU.
 ```
 
-d. Install the explainability library
+d. Install the explainability libraries
 
 ```bash
-
-git clone https://github.com/hila-chefer/Transformer-MM-Explainability
-
-cd Transformer-MM-Explainability
-
 pip install einops
-pip install ftfy
 pip install captum
+pip install opencv-python
+pip install ftfy
 ```
