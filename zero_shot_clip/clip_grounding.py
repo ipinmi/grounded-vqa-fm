@@ -149,7 +149,20 @@ def show_heatmap_on_text(text, text_encoding, R_text):
     visualization.visualize_text(vis_data_records)
 
 
-def show_image_with_bounding_boxes(image_relevance, image, orig_image, threshold=0.5):
+def show_image_with_bounding_boxes(
+    image_relevance, image, orig_image, orig_bounding_boxes, threshold=0.5
+):
+    """
+    Displays the original image with its bounding boxes alongside the image with relevance-based bounding boxes.
+
+    Args:
+        image_relevance: Relevance map for the image.
+        image: Tensor of the processed image.
+        orig_image: Original image array (e.g., loaded via PIL or OpenCV).
+        orig_bounding_boxes: List of original bounding boxes as tensors/lists.
+        threshold: Threshold for relevance map to compute bounding boxes.
+    """
+
     def show_cam_on_image(img, mask):
         heatmap = cv2.applyColorMap(np.uint8(255 * mask), cv2.COLORMAP_JET)
         heatmap = np.float32(heatmap) / 255
@@ -157,12 +170,13 @@ def show_image_with_bounding_boxes(image_relevance, image, orig_image, threshold
         cam = cam / np.max(cam)
         return cam
 
+    # Process the relevance map
     dim = int(image_relevance.numel() ** 0.5)
     image_relevance = image_relevance.reshape(1, 1, dim, dim)
     image_relevance = torch.nn.functional.interpolate(
         image_relevance, size=224, mode="bilinear"
     )
-    image_relevance = image_relevance.reshape(224, 224).cuda().data.cpu().numpy()
+    image_relevance = image_relevance.reshape(224, 224).cpu().numpy()
     image_relevance = (image_relevance - image_relevance.min()) / (
         image_relevance.max() - image_relevance.min()
     )
@@ -172,23 +186,39 @@ def show_image_with_bounding_boxes(image_relevance, image, orig_image, threshold
     )
     bounding_boxes = [cv2.boundingRect(contour) for contour in contours]
 
-    image = image[0].permute(1, 2, 0).data.cpu().numpy()
+    # Process the image for visualization
+    image = image[0].permute(1, 2, 0).cpu().numpy()
     image = (image - image.min()) / (image.max() - image.min())
     vis = show_cam_on_image(image, image_relevance)
     vis = np.uint8(255 * vis)
-    vis = cv2.cvtColor(np.array(vis), cv2.COLOR_RGB2BGR)
+    vis = cv2.cvtColor(vis, cv2.COLOR_RGB2BGR)
 
+    # Add bounding boxes to the relevance visualization
     for x, y, w, h in bounding_boxes:
         cv2.rectangle(vis, (x, y), (x + w, y + h), (0, 255, 0), 2)
 
-    fig, axs = plt.subplots(1, 2)
-    axs[0].imshow(orig_image)
+    # Convert orig_image to OpenCV format if it's a PIL image
+    if isinstance(orig_image, Image.Image):
+        orig_image = np.array(orig_image)
+    orig_image = cv2.cvtColor(orig_image, cv2.COLOR_RGB2BGR)
+
+    # Draw the original bounding boxes on the original image
+    orig_with_boxes = orig_image.copy()
+    for box in orig_bounding_boxes:
+        x1, y1, x2, y2 = map(int, box.squeeze().tolist())
+        cv2.rectangle(orig_with_boxes, (x1, y1), (x2, y2), (0, 255, 0), 2)
+
+    # Plot both images
+    fig, axs = plt.subplots(1, 2, figsize=(12, 6))
+    axs[0].imshow(cv2.cvtColor(orig_with_boxes, cv2.COLOR_BGR2RGB))
     axs[0].axis("off")
-    axs[1].imshow(vis)
+    # axs[0].set_title("Original Image with Bounding Boxes")
+    axs[1].imshow(cv2.cvtColor(vis, cv2.COLOR_BGR2RGB))
     axs[1].axis("off")
+    # axs[1].set_title("Relevance Map with Bounding Boxes")
     plt.show()
 
-    # return bounding_boxes
+    return bounding_boxes
 
 
 #### END OF CODE ADAPTATION ####
@@ -209,16 +239,16 @@ def get_prediction(image, text, model, choices=None):
     """
     if choices is None:
         logits_per_image, logits_per_text = model(image, text)
-        print(
+        """print(
             color.BOLD
             + color.BLUE
             + color.UNDERLINE
             + f"CLIP similarity score: {logits_per_image.item()}"
             + color.END
-        )
+        )"""
 
         # Softmax to get probabilities
-        batch_probs = logits_per_image.softmax(dim=-1).squeeze(0).cpu().numpy()
+        batch_probs = logits_per_image.softmax(dim=-1).squeeze(0).detach().cpu().numpy()
 
         # Convert to one-hot encoded predictions
         predicted_label = np.argmax(batch_probs)  # Index of the highest probability
@@ -292,41 +322,47 @@ def attention_visualizaton(
             predicted_label = get_prediction(image, text_input, model, None)
 
         elif mode == "no_answer":
-            question_tokens = clip.tokenize(questions[0]).to(device)  # shape: (1, 77)
+            text_input = clip.tokenize(questions[0]).to(device)  # shape: (1, 77)
             choices_tokens = clip.tokenize(choices).to(
                 device
             )  # shape: (num of choices, 77)
 
-            text_input = question_tokens
+            question_answers = questions
 
             predicted_label = get_prediction(image, text_input, model, choices_tokens)
 
-        # Select the predicted and correct choices for visualization
+        """# Select the predicted and correct choices for visualization
         if predicted_label == labels.index(1):
-            text_input = text_input[predicted_label]
+            text_input = text_input[[predicted_label]]
         elif predicted_label < labels.index(1):
             text_input = text_input[[predicted_label, labels.index(1)]]
         else:
-            text_input = text_input[[labels.index(1), predicted_label]]
+            text_input = text_input[[labels.index(1), predicted_label]]"""
 
         # Interpret the model and visualize the attention maps
         R_text, R_image = interpret(model=model, image=image, texts=text_input)
         batch_size = text_input.shape[0]
-        for i in range(batch_size):
-            show_heatmap_on_text(text_input[i], text_input[i], R_text[i])
-            bounding_box = show_image_with_bounding_boxes(
-                R_image[i], image, orig_image=Image.open(img_path)
-            )
-            plt.show()
 
-            # save bounding box values in a json file
-            bounding_results[annot_id] = {
+        print(f"Correct answer: {choices[labels.index(1)]}")
+        print(f"Predicted answer: {choices[predicted_label]}")
+        print("--------")
+
+        for i in range(batch_size):
+            if i == predicted_label or i == labels.index(1):
+                show_heatmap_on_text(question_answers[i], text_input[i], R_text[i])
+                bounding_box = show_image_with_bounding_boxes(
+                    R_image[i], image, orig_image=Image.open(img_path)
+                )
+                plt.show()
+
+                # save bounding box values in a json file
+                """bounding_results[annot_id] = {
                 "question": questions[0],
                 "correct_answer": choices[labels.index(1)],
                 "image_path": img_path,
                 "orig_bounding_boxes": detections["boxes"],
                 "pred_bounding_boxes": bounding_box,
-            }
+            }"""
 
         if idx == num_samples:
             break

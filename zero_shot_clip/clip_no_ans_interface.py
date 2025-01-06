@@ -12,7 +12,6 @@ device = "cuda" if torch.cuda.is_available() else "cpu"
 model, preprocessor = clip.load("ViT-B/32", device=device)
 
 
-# NOTE: Adjust code (defined answer types)
 def test_CLIP_on_VCR(dataloader: DataLoader):
     """
     Test the CLIP model on a batch of VCR data without passing the answer to the model.

@@ -20,7 +20,7 @@ from zero_shot_clip.clip_ans_interface import (
     run_CLIP_on_VQA,
 )
 
-from zero_shot_clip.clip_no_ans_interface import test_CLIP_on_VQA
+from zero_shot_clip.clip_no_ans_interface import test_CLIP_on_VQA, test_CLIP_on_VCR
 
 ####
 # Arguments for data preprocessing and loading
@@ -82,15 +82,20 @@ def vcr_main():
         split="val",
         only_use_relevant_dets=False,
     )
-    dataset = VCRDataset(extracted_vcr, "vqa")
+    dataset = VCRDataset(extracted_vcr, "vqa", size=1000)
     batch_sampler = BatchSampler(dataset, batch_size=4)
     dataloader = VCRDataLoader(dataset, batch_sampler=batch_sampler)
 
     # Run the CLIP model
     print("Running CLIP on VCR data...\n")
-    vcr_results = run_CLIP_on_VCR(dataloader)
-    # save_json(vcr_results, "results/clip_vcr_results.json")
-    print(vcr_results)
+    if answer_mode == "answer":
+        vcr_results = run_CLIP_on_VCR(dataloader)
+        save_json(vcr_results, "results/clip_vcr_results.json")
+        # print(vcr_results)
+    elif answer_mode == "no_ans":
+        vcr_results = test_CLIP_on_VCR(dataloader)
+        save_json(vcr_results, "results/clip_vcr_results_no_ans.json")
+        # print(vcr_results)
 
 
 def vqa_main():
