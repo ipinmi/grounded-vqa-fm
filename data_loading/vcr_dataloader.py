@@ -94,7 +94,7 @@ class VCRDataExtractor(Dataset):
     ):
         """
         Args:
-        split: train, val, or test
+        split: train, val, val_test (split from val) or test
         mode: answer or rationale (Q-A or QA-R tasks)
         only_use_relevant_dets: If True, only use the relevant detections
         """
@@ -228,7 +228,7 @@ class VCRDataExtractor(Dataset):
         instance_dict["answer_tags"] = converted_answer_tags
 
         # Add the label for the instance based on answers or rationale mode
-        if self.split != "test":
+        if self.split != "val_test":
             instance_dict["label"] = item["{}_label".format(self.mode)]
 
         instance_dict["metadata"] = {

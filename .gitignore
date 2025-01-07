@@ -4,3 +4,4 @@ __pycache__
 vqa_v2_test.ipynb
 data/
 results/
+models/
