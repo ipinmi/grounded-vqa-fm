@@ -21,8 +21,11 @@ grounded-vqa-fm/
 │   ├──clip_no_answer.py
 │   ├──clip_answer.py
 ├── extended_clip/
-│   ├── linear clip models/
-│   ├── attention-based clip models/
+│   ├── linear_clip.py
+│   ├── cross_modal_clip/
+│   │   ├── model.py
+│   │   ├── features.py
+│   │   ├── cross_modal_fusion.py
 ├── results/
 
 ```

@@ -199,7 +199,7 @@ def train_linear_vqa(DATA_DIR, LEARN_RATE, batchSize=32, num_epochs=20):
     # train questions: 443,757 questions
 
     train_qa_pairs, train_possible_answers_by_type, train_answers, _ = load_vqa_data(
-        DATA_DIR, split="train", top_k=100, max_pairs=100000
+        DATA_DIR, split="train", top_k=100, max_pairs=100000, load_all=False
     )
     train_dataset = VQADataset(
         train_qa_pairs,
@@ -212,8 +212,8 @@ def train_linear_vqa(DATA_DIR, LEARN_RATE, batchSize=32, num_epochs=20):
 
     # Validation dataset
     # val questions: 214,354 questions
-    val_qa_pairs, val_possible_answers_by_type, val_answers, _ = load_vqa_data(
-        DATA_DIR, split="val", top_k=50, max_pairs=10000
+    val_qa_pairs, val_possible_answers_by_type, val_answers = load_vqa_data(
+        DATA_DIR, split="val", top_k=50, max_pairs=10000, load_all=False
     )
     val_dataset = VQADataset(
         val_qa_pairs,

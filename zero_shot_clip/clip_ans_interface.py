@@ -101,8 +101,8 @@ def run_CLIP_on_VCR(dataloader: DataLoader):
     else:
         accuracy = correct / len(results)
 
-    print(f"Accuracy over the VCR data with access to answers: {accuracy}")
-    return results
+    print(f"Accuracy over the VCR data with access to answers: {accuracy:.2f}")
+    return results, accuracy
 
 
 def run_CLIP_on_VQA(dataloader: DataLoader):
@@ -176,9 +176,9 @@ def run_CLIP_on_VQA(dataloader: DataLoader):
     else:
         accuracy = correct / len(results)
 
-    print(f"Accuracy over the VQA V2 data with access to answers: {accuracy}")
+    print(f"Accuracy over the VQA V2 data with access to answers: {accuracy:.2f}")
 
-    return results
+    return results, accuracy
 
 
 def eval_on_accuracy(results, dataset):

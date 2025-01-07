@@ -75,34 +75,47 @@ def save_json(data, path):
 
 def vcr_main():
     # Extract data from VCR and create a dataloader
+    num_qa_pairs = 1000
     extracted_vcr = VCRDataExtractor(
         ANNOTS_DIR,
         IMAGES_DIR,
         mode="answer",
         split="val",
-        only_use_relevant_dets=False,
+        only_use_relevant_dets=True,
     )
-    dataset = VCRDataset(extracted_vcr, "vqa", size=1000)
+    dataset = VCRDataset(extracted_vcr, "vqa", size=num_qa_pairs)
     batch_sampler = BatchSampler(dataset, batch_size=4)
     dataloader = VCRDataLoader(dataset, batch_sampler=batch_sampler)
 
     # Run the CLIP model
     print("Running CLIP on VCR data...\n")
     if answer_mode == "answer":
-        vcr_results = run_CLIP_on_VCR(dataloader)
-        save_json(vcr_results, "results/clip_vcr_results.json")
+        vcr_results, accuracy = run_CLIP_on_VCR(dataloader)
+        save_json(vcr_results, f"{results_path}/clip_vcr_results.json")
         # print(vcr_results)
     elif answer_mode == "no_ans":
-        vcr_results = test_CLIP_on_VCR(dataloader)
-        save_json(vcr_results, "results/clip_vcr_results_no_ans.json")
+        vcr_results, accuracy = test_CLIP_on_VCR(dataloader)
+        save_json(vcr_results, f"{results_path}/clip_vcr_results_no_ans.json")
         # print(vcr_results)
+
+    # Save the evaluation results
+    with open(f"{results_path}/evaluation_results_{dataset_type}.txt", "a") as f:
+        f.write(f"Mode: CLIP Zero shot Model Evaluation in {answer_mode} \n")
+        f.write(f"Dataset: VCR \n")
+        f.write(f"Accuracy: {accuracy}\n")
+        f.write(f"Validation number of batches: {len(vcr_results)} \n")
+        f.write(f"Number of QA pairs: {num_qa_pairs} \n")
+        f.write("\n")
 
 
 def vqa_main():
     batchSize = 64
+    top_k_ans = 1000
+    num_qa_pairs = 100000
+
     # Testing over the validation set of VQA V2
     val_qa_pairs, val_possible_answers_by_type, val_answers = load_vqa_data(
-        ANNOTS_DIR, split="val", top_k=100, max_pairs=3000
+        ANNOTS_DIR, split="val", top_k=top_k_ans, max_pairs=num_qa_pairs, load_all=True
     )
     val_dataset = VQADataset(
         val_qa_pairs,
@@ -116,12 +129,23 @@ def vqa_main():
     # Run the CLIP model on VQA V2 data
     print("Running CLIP on VQA V2 data...\n")
     if answer_mode == "answer":
-        vqa_results = run_CLIP_on_VQA(val_dataloader)
-        save_json(vqa_results, "results/clip_vqa_results.json")
+        vqa_results, accuracy = run_CLIP_on_VQA(val_dataloader)
+        save_json(vqa_results, f"{results_path}/clip_vqa_results.json")
 
     elif answer_mode == "no_ans":
-        vqa_results = test_CLIP_on_VQA(val_dataloader, dataset=val_dataset)
-        save_json(vqa_results, "results/clip_vqa_results_no_ans.json")
+        vqa_results, accuracy = test_CLIP_on_VQA(val_dataloader, dataset=val_dataset)
+
+        save_json(vqa_results, f"{results_path}/clip_vqa_results_no_ans.json")
+
+    # Save the evaluation results
+    with open(f"{results_path}/evaluation_results_{dataset_type}.txt", "a") as f:
+        f.write(f"Mode: CLIP Zero shot Model Evaluation in {answer_mode} \n")
+        f.write(f"Dataset: VQA \n")
+        f.write(f"Accuracy: {accuracy}\n")
+        f.write(f"Validation data size: {len(vqa_results)} \n")
+        f.write(f"Number of unique answers from all types: {top_k_ans} \n")
+        f.write(f"Number of QA pairs: {num_qa_pairs} \n")
+        f.write("\n")
 
 
 if __name__ == "__main__":

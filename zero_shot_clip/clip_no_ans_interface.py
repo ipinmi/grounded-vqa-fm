@@ -85,7 +85,7 @@ def test_CLIP_on_VCR(dataloader: DataLoader):
 
     print(f"Overall accuracy: {total_accuracy:.2%} ({correct}/{len(results)})")
 
-    return results
+    return results, total_accuracy
 
 
 def test_CLIP_on_VQA(dataloader: DataLoader, dataset: Dataset):
@@ -201,4 +201,4 @@ def test_CLIP_on_VQA(dataloader: DataLoader, dataset: Dataset):
 
     print(f"Overall accuracy: {total_accuracy:.2%} ({total_correct}/{len(results)})")
 
-    return results
+    return results, total_accuracy
