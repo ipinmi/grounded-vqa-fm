@@ -161,5 +161,5 @@ if __name__ == "__main__":
         raise ValueError("Dataset type not recognized")
 
 
-# python3 -W ignore main.py --annots_dir data/vcr1annots --image_dir data/vcr1images --dataset vcr --ans_mode no_ans
-# python3 -W ignore main.py --annots_dir data/vqa_v2 --image_dir data/vqa_v2 --dataset vqa --ans_mode no_ans
+# python3 -W ignore zero_shot.py --annots_dir data/vcr1annots --image_dir data/vcr1images --dataset vcr --ans_mode no_ans
+# python3 -W ignore zero_shot.py --annots_dir data/vqa_v2 --image_dir data/vqa_v2 --dataset vqa --ans_mode no_ans

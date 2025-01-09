@@ -1,12 +1,12 @@
 import torch
 import clip
-from PIL import Image
+from PIL import Image, ImageFile
 import numpy as np
 import torch
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-
+ImageFile.LOAD_TRUNCATED_IMAGES = True
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
 model, preprocessor = clip.load("ViT-B/32", device=device)

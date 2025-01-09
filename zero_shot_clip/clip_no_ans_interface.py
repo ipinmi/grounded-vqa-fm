@@ -1,11 +1,11 @@
 import torch
 import clip
-from PIL import Image
-import numpy as np
+from PIL import Image, ImageFile
 import torch
 from torch.utils.data import DataLoader, Dataset
 from tqdm import tqdm
 
+ImageFile.LOAD_TRUNCATED_IMAGES = True
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 

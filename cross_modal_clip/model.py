@@ -1,10 +1,6 @@
 import torch
 import torch.nn as nn
 import clip
-from PIL import Image
-from tqdm import tqdm
-import argparse
-from torch.utils.data import DataLoader
 
 from cross_modal_clip.cross_modal_fusion import CrossModalFusion
 

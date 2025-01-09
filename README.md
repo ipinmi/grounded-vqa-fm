@@ -1,5 +1,5 @@
 @author: Chibundum Adebayo
-@date: 06.01.2025
+@creation-date: 06.01.2025
 
 # Visually-Grounded Question Answering with Foundation Models
 
@@ -25,11 +25,10 @@ grounded-vqa-fm/
 ├── cross_modal_clip/
 │   ├── model.py
 │   ├── cross_modal_fusion.py
-├── results/
-├── train.py
+├── zero_shot.py
+├── linear_train.py
 ├── cma_train.py
-├── main.py
-
+├── results/
 ```
 
 ## Project Setup

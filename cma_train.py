@@ -117,7 +117,7 @@ def train_cma_vcr(
 
     # Define the loss function and optimizer
     criterion = torch.nn.CrossEntropyLoss(label_smoothing=0.1)
-    optimizer = torch.optim.Adam(model.parameters(), lr=LEARN_RATE)
+    optimizer = torch.optim.Adam(model.parameters(), lr=learn_rate)
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=3, gamma=0.1)
 
     # Initialize the best validation loss
@@ -238,7 +238,7 @@ def train_cma_vcr(
     return model
 
 
-def train_cma_vqa(DATA_DIR, LEARN_RATE, batchSize=BATCH_SIZE, num_epochs=NUM_EPOCHS):
+def train_cma_vqa(DATA_DIR, learn_rate, batchSize=BATCH_SIZE, num_epochs=NUM_EPOCHS):
 
     # Load the pre-trained CLIP model
     clip_model, preprocessor = clip.load("ViT-B/32", device=device)
@@ -287,7 +287,7 @@ def train_cma_vqa(DATA_DIR, LEARN_RATE, batchSize=BATCH_SIZE, num_epochs=NUM_EPO
 
     # Define the loss function and optimizer
     criterion = torch.nn.CrossEntropyLoss(label_smoothing=0.1)
-    optimizer = torch.optim.Adam(model.parameters(), lr=LEARN_RATE)
+    optimizer = torch.optim.Adam(model.parameters(), lr=learn_rate)
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=3, gamma=0.1)
 
     # Initialize the best validation loss
