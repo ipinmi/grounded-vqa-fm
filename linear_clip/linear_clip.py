@@ -9,34 +9,54 @@ class VCRLinearModel(nn.Module):
     and outputs the probabilities of the choices.
     """
 
-    def __init__(self, clip_model, num_choices, hidden_size=512, drop_out=0.5):
+    def __init__(
+        self, clip_model, num_choices, hidden_size=512, drop_out=0.5, task="vqa"
+    ):
         super(VCRLinearModel, self).__init__()
         self.hidden_size = hidden_size
         self.drop_out = drop_out
         self.clip_model = clip_model
+        self.task = task
 
         # Freeze the CLIP model during training
         for param in self.clip_model.parameters():
             param.requires_grad = False
 
         # define the linear layer for the VQA classification task
-        self.classifier = nn.Sequential(
-            nn.Linear(
-                clip_model.visual.output_dim + clip_model.text_projection.shape[1],
-                hidden_size,
-            ),  # both of dimension 512
-            nn.ReLU(),
-            nn.Dropout(self.drop_out),
-            nn.Linear(hidden_size, num_choices),
-        )
-        self.softmax = nn.Softmax(dim=-1)
+        if self.task == "vqa":
+            self.classifier = nn.Sequential(
+                nn.Linear(
+                    clip_model.visual.output_dim + clip_model.text_projection.shape[1],
+                    hidden_size,
+                ),  # both of dimension 512
+                nn.ReLU(),
+                nn.Dropout(self.drop_out),
+                nn.Linear(hidden_size, num_choices),
+            )
 
-    def forward(self, images, questions, choices):
+        elif self.task == "vqa-r":
+            self.classifier = nn.Sequential(
+                nn.Linear(
+                    clip_model.visual.output_dim
+                    + clip_model.text_projection.shape[1]
+                    + clip_model.text_projection.shape[1],
+                    hidden_size * 2,
+                ),  # all of dimension 512
+                nn.ReLU(),
+                nn.Dropout(self.drop_out),
+                nn.Linear(hidden_size * 2, hidden_size),
+                nn.ReLU(),
+                nn.Dropout(self.drop_out),
+                nn.Linear(hidden_size, num_choices),
+            )
+        # self.softmax = nn.Softmax(dim=-1)
+
+    def forward(self, images, questions, choice):
         # Extract the image and text (question and the possible choices) features from the frozen CLIP model
         with torch.no_grad():
             image_features = self.clip_model.encode_image(images)
             question_features = self.clip_model.encode_text(questions)
-            choices_features = self.clip_model.encode_text(choices)
+            choices_features = self.clip_model.encode_text(choice)
 
             # convert to float32 for compatibility with the classifier
             image_features = image_features.float()
@@ -44,20 +64,29 @@ class VCRLinearModel(nn.Module):
             choices_features = choices_features.float()
 
         # Normalize the image and text features
-        image_features /= image_features.norm(dim=-1, keepdim=True)
-        question_features /= question_features.norm(dim=-1, keepdim=True)
-        choices_features /= choices_features.norm(dim=-1, keepdim=True)
+        image_features /= image_features.norm(
+            dim=-1, keepdim=True
+        )  # size: (batch_size, 512)
+        question_features /= question_features.norm(
+            dim=-1, keepdim=True
+        )  # size: (batch_size, 512)
+        choices_features /= choices_features.norm(
+            dim=-1, keepdim=True
+        )  # size: (batch_size, num_choices, 512)
 
-        # Create the joint image-text embedding
-        joint_features = torch.cat(
-            [image_features, question_features, choices_features], dim=1
-        )
+        # Create the joint image-text embedding based on the task
+        if self.task == "vqa":
+            joint_features = torch.cat([image_features, question_features], dim=1)
+        elif self.task == "vqa-r":
+            joint_features = torch.cat(
+                [image_features, question_features, choices_features], dim=1
+            )
 
         # Pass the joint features through the classifier
-        logits = self.classifier(joint_features)
+        output = self.classifier(joint_features)
 
         # Softmax to get probabilities
-        output = self.softmax(logits)
+        # output = self.softmax(logits)
 
         return output
 
@@ -108,6 +137,6 @@ class VQALinearModel(nn.Module):
         joint_features = torch.cat([image_features, question_features], dim=1)
 
         # Pass the joint features through the classifier
-        output = self.classifier(joint_features)
+        output = self.classifier(joint_features)  # size: (batch_size, num_answers)
 
         return output

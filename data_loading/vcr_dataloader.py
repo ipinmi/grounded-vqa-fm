@@ -272,7 +272,7 @@ class VCRDataExtractor(Dataset):
 
 
 class VCRDataset(Dataset):
-    def __init__(self, data, objective="vqa", size=1000):
+    def __init__(self, data, objective="vqa", load_all: bool = True, size=1000):
         """
         Args:
             data: List of dictionaries, where each dictionary contains:
@@ -282,6 +282,8 @@ class VCRDataset(Dataset):
             objective: zero shot objective
                 - 'vqa' (for visual question answering)
                 - 'objdet' (for object detection)
+            load_all: If True, load the entire dataset
+            size: Number of instances to load
         """
         self.data = []
         self.fields_to_add = ["objects", "objects_cats"]
@@ -316,8 +318,9 @@ class VCRDataset(Dataset):
                 for idx, answer in enumerate(answers)
             )
 
-        # Limit the dataset size
-        self.data = self.data[:size]
+        if not load_all:
+            # Limit the dataset size
+            self.data = self.data[:size]
 
     def __len__(self):
         return len(self.data)

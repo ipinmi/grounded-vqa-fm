@@ -75,7 +75,6 @@ def save_json(data, path):
 
 def vcr_main():
     # Extract data from VCR and create a dataloader
-    num_qa_pairs = 1000
     extracted_vcr = VCRDataExtractor(
         ANNOTS_DIR,
         IMAGES_DIR,
@@ -83,7 +82,10 @@ def vcr_main():
         split="val",
         only_use_relevant_dets=True,
     )
-    dataset = VCRDataset(extracted_vcr, "vqa", size=num_qa_pairs)
+
+    num_qa_pairs = len(extracted_vcr)
+
+    dataset = VCRDataset(extracted_vcr, "vqa", load_all=True, size=num_qa_pairs)
     batch_sampler = BatchSampler(dataset, batch_size=4)
     dataloader = VCRDataLoader(dataset, batch_sampler=batch_sampler)
 

@@ -20,13 +20,15 @@ grounded-vqa-fm/
 ├── zero_shot_clip/
 │   ├──clip_no_answer.py
 │   ├──clip_answer.py
-├── extended_clip/
+├── linear_clip/
 │   ├── linear_clip.py
-│   ├── cross_modal_clip/
-│   │   ├── model.py
-│   │   ├── features.py
-│   │   ├── cross_modal_fusion.py
+├── cross_modal_clip/
+│   ├── model.py
+│   ├── cross_modal_fusion.py
 ├── results/
+├── train.py
+├── cma_train.py
+├── main.py
 
 ```
 
@@ -53,7 +55,20 @@ git clone https://github.com/ipinmi/grounded-vqa-fm.git
 
 ### 3. Download the required datasets and pre-trained models.
 
-a. VQA v2 dataset
+a. VCR dataset
+
+```bash
+# Download the VCR dataset and annotations from the project's Kaggle dataset
+# Add your Kaggle API key as an environment variable
+
+# https://visualcommonsense.com/download/
+
+pip install kaggle --quiet
+kaggle datasets download ipinmi/visual-question-and-answering
+unzip -q visual-question-and-answering.zip -d data
+```
+
+b. VQA v2 dataset
 
 ```bash
 # Download the VQA v2 dataset
@@ -63,18 +78,7 @@ curl -OL http://images.cocodataset.org/zips/val2014.zip OR wget http://images.co
 unzip train2014.zip -d data/vqa_v2
 unzip val2014.zip -d data/vqa_v2
 
-# Download the VQA v2 annotations and questions from the official website
-https://visualqa.org/download.html (Balanced Real images)
-```
-
-b. VCR dataset
-
-```
-Download the VCR dataset and annotations from the official website
-
-https://visualcommonsense.com/download/
-
-Move the downloaded files to the data directory
+# the VQA v2 annotations and questions are included in the created kaggle dataset
 ```
 
 c. Install the CLIP model (copied from the [official repository](https://github.com/openai/CLIP))
