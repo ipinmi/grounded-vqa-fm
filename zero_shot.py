@@ -78,7 +78,7 @@ def vcr_main():
     extracted_vcr = VCRDataExtractor(
         ANNOTS_DIR,
         IMAGES_DIR,
-        mode="answer",
+        mode="rationale",
         split="val",
         only_use_relevant_dets=True,
     )

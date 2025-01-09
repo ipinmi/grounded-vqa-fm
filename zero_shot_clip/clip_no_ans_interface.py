@@ -48,7 +48,8 @@ def test_CLIP_on_VCR(dataloader: DataLoader):
             answers_features /= answers_features.norm(dim=-1, keepdim=True)
 
             # encode the question
-            encoded_questions = clip.tokenize(questions[0]).to(device)  # shape: (1, 77)
+            question = questions[0][:77]  # Limit to 77 tokens to fit in the model
+            encoded_questions = clip.tokenize(question).to(device)  # shape: (1, 77)
 
             # Create inputs for the model
             image_features = model.encode_image(image)
