@@ -37,6 +37,22 @@ parser.add_argument(
 )
 
 parser.add_argument(
+    "--batch_size",
+    help="Batch size for training",
+    default=64,
+    required=False,
+    type=int,
+)
+
+parser.add_argument(
+    "--num_epochs",
+    help="Number of epochs to train the model",
+    default=20,
+    required=False,
+    type=int,
+)
+
+parser.add_argument(
     "--dataset",
     help="Dataset to be used",
     default="vcr",
@@ -48,16 +64,23 @@ ANNOTS_DIR = args.annots_dir
 IMAGES_DIR = args.image_dir
 LEARN_RATE = args.learn_rate
 dataset_type = args.dataset
+BATCH_SIZE = args.batch_size
+NUM_EPOCHS = args.num_epochs
+
+device = "cuda" if torch.cuda.is_available() else "cpu"
 
 
-def train_linear_vcr(annots_dir, imgs_dir, learn_rate, batchSize=4, num_epochs=20):
-
-    device = "cuda" if torch.cuda.is_available() else "cpu"
+def train_linear_vcr(
+    annots_dir, imgs_dir, learn_rate, batchSize=BATCH_SIZE, num_epochs=NUM_EPOCHS
+):
 
     # Load the pre-trained CLIP model
     clip_model, preprocessor = clip.load("ViT-B/32", device=device)
 
     # Load the VCR train dataset
+    train_max_pairs = 10000
+    val_max_pairs = 1000
+
     extracted_train_vcr = VCRDataExtractor(
         annots_dir,
         imgs_dir,
@@ -65,7 +88,7 @@ def train_linear_vcr(annots_dir, imgs_dir, learn_rate, batchSize=4, num_epochs=2
         split="train",
         only_use_relevant_dets=True,
     )
-    train_dataset = VCRDataset(extracted_train_vcr, "vqa", load_all=False, size=10000)
+    train_dataset = VCRDataset(extracted_train_vcr, "vqa", load_all=True)
     train_batch_sampler = BatchSampler(train_dataset, batch_size=batchSize)
     train_dataloader = VCRDataLoader(train_dataset, batch_sampler=train_batch_sampler)
 
@@ -77,7 +100,7 @@ def train_linear_vcr(annots_dir, imgs_dir, learn_rate, batchSize=4, num_epochs=2
         split="val",
         only_use_relevant_dets=True,
     )
-    val_dataset = VCRDataset(extracted_val_vcr, "vqa", load_all=False, size=1000)
+    val_dataset = VCRDataset(extracted_val_vcr, "vqa", load_all=True)
     val_batch_sampler = BatchSampler(val_dataset, batch_size=batchSize)
     val_dataloader = VCRDataLoader(val_dataset, batch_sampler=val_batch_sampler)
 
@@ -169,11 +192,6 @@ def train_linear_vcr(annots_dir, imgs_dir, learn_rate, batchSize=4, num_epochs=2
                 outputs = model(image, question_tokens, choice_tokens)
                 loss = criterion(outputs, labels_tensor)
 
-                # Backward pass
-                optimizer.zero_grad()
-                loss.backward()
-                optimizer.step()
-
                 # Compute the accuracy and loss
                 epoch_val_loss += loss.item()
                 _, predicted = outputs.max(dim=1)
@@ -194,15 +212,15 @@ def train_linear_vcr(annots_dir, imgs_dir, learn_rate, batchSize=4, num_epochs=2
         scheduler.step()
 
         # Save the best performing model
-        """if epoch_val_loss < best_val_loss:
+        if epoch_val_loss < best_val_loss:
             best_val_loss = epoch_val_loss
             torch.save(
                 model.state_dict(), f"results/vqa_clip_linear_{epoch_val_loss:.2f}.pt"
-            )"""
+            )
     return model
 
 
-def train_linear_vqa(DATA_DIR, LEARN_RATE, batchSize=64, num_epochs=20):
+def train_linear_vqa(DATA_DIR, LEARN_RATE, batchSize=BATCH_SIZE, num_epochs=NUM_EPOCHS):
     # Load the pre-trained CLIP model
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -226,7 +244,7 @@ def train_linear_vqa(DATA_DIR, LEARN_RATE, batchSize=64, num_epochs=20):
     # Validation dataset
     # val questions: 214,354 questions
     val_qa_pairs, val_possible_answers_by_type, val_answers = load_vqa_data(
-        DATA_DIR, split="val", top_k=50, max_pairs=10000, load_all=False
+        DATA_DIR, split="val", top_k=100, max_pairs=10000, load_all=False
     )
     val_dataset = VQADataset(
         val_qa_pairs,
@@ -329,22 +347,26 @@ def train_linear_vqa(DATA_DIR, LEARN_RATE, batchSize=64, num_epochs=20):
         scheduler.step()
 
         # Save the best performing model
-        """if epoch_val_loss < best_val_loss:
+        if epoch_val_loss < best_val_loss:
             best_val_loss = epoch_val_loss
             torch.save(
                 model.state_dict(), f"results/vqa_clip_linear_{epoch_val_loss:.2f}.pt"
-            )"""
+            )
     return model
 
 
 if __name__ == "__main__":
     if dataset_type == "vcr":
-        linear_clip_model = train_linear_vcr(ANNOTS_DIR, IMAGES_DIR, LEARN_RATE)
+        linear_clip_model = train_linear_vcr(
+            ANNOTS_DIR, IMAGES_DIR, LEARN_RATE, BATCH_SIZE, NUM_EPOCHS
+        )
     elif dataset_type == "vqa":
-        linear_clip_model = train_linear_vqa(ANNOTS_DIR, LEARN_RATE)
+        linear_clip_model = train_linear_vqa(
+            ANNOTS_DIR, LEARN_RATE, BATCH_SIZE, NUM_EPOCHS
+        )
     else:
         raise ValueError("Dataset type not recognized")
 
 
-# Sample usage: python3 linear_train.py --annots_dir data/vcr1annots --image_dir data/vcr1images --learn_rate 0.001 --dataset vcr
-# Sample usage: python3 linear_train.py --annots_dir data/vqa_v2 --image_dir data/vqa_v2 --learn_rate 0.001 --dataset vqa
+# Sample usage: python3 linear_train.py --annots_dir data/vcr1annots --image_dir data/vcr1images --learn_rate 0.001 --batch_size 4 --num_epochs 20 --dataset vcr
+# Sample usage: python3 linear_train.py --annots_dir data/vqa_v2 --image_dir data/vqa_v2 --learn_rate 0.001  --batch_size 32 --num_epochs 20 --dataset vqa

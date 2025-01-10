@@ -105,21 +105,34 @@ class VCRDataExtractor(Dataset):
         self.image_dir = image_dir
 
         # Load the annotations for the split
-        with open(
-            os.path.join(annots_dir, "{}.jsonl".format(split)), "r"
-        ) as jsonl_file:
-            self.data = [json.loads(line) for line in jsonl_file]
+        try:
+            with open(
+                os.path.join(annots_dir, "{}.jsonl".format(split)), "r"
+            ) as jsonl_file:
+                self.data = [json.loads(line) for line in jsonl_file]
+        except FileNotFoundError:
+            print(
+                f"Warning: Annotation file '{split}.jsonl' not found in '{annots_dir}'. Skipping data loading."
+            )
+            self.data = []
 
         # Load COCO ontology for object detection labels
-        with open(
-            os.path.join(self.annots_dir, "cocoontology.json"),
-            "r",
-        ) as f:
-            coco = json.load(f)
-        self.coco_objects = ["__background__"] + [
-            x["name"] for k, x in sorted(coco.items(), key=lambda x: int(x[0]))
-        ]
-        self.coco_obj_to_ind = {o: i for i, o in enumerate(self.coco_objects)}
+        try:
+            with open(
+                os.path.join(self.annots_dir, "cocoontology.json"),
+                "r",
+            ) as f:
+                coco = json.load(f)
+            self.coco_objects = ["__background__"] + [
+                x["name"] for k, x in sorted(coco.items(), key=lambda x: int(x[0]))
+            ]
+            self.coco_obj_to_ind = {o: i for i, o in enumerate(self.coco_objects)}
+        except FileNotFoundError:
+            print(
+                "Warning: 'cocoontology.json' not found. Object detection labels will be empty."
+            )
+            self.coco_objects = []
+            self.coco_obj_to_ind = {}
 
     def __len__(self):
         return len(self.data)
@@ -184,98 +197,112 @@ class VCRDataExtractor(Dataset):
         idx: Index of the instance
 
         Returns:
-        Dictionary containing the instance information
-            (question, answers, labels, metadata, image path, and image metadata)
+        Dictionary containing the instance information or None if the instance cannot be created.
         """
         item = deepcopy(self.data[idx])
 
-        dets2use, old_det_to_new_ind = self._get_dets_to_use(item)
+        try:
+            dets2use, old_det_to_new_ind = self._get_dets_to_use(item)
 
-        # for the QA-R task, append the correct answer choice to the question
-        if self.mode == "rationale":
-            conditioned_label = item["answer_label"]
-            item["question"] += item["answer_choices"][conditioned_label]
-            answer_choices = item["rationale_choices"]
+            # for the QA-R task, append the correct answer choice to the question
+            if self.mode == "rationale":
+                conditioned_label = item["answer_label"]
+                item["question"] += item["answer_choices"][conditioned_label]
+                answer_choices = item["rationale_choices"]
 
-        # for the Q-A task, use the answer choices
-        elif self.mode == "answer":
-            answer_choices = item["answer_choices"]
+            # for the Q-A task, use the answer choices
+            elif self.mode == "answer":
+                answer_choices = item["answer_choices"]
 
-        # Converted the question and answer choices
-        converted_questions, converted_question_tags = index_to_names(
-            item["question"],
-            item["objects"],
-            old_det_to_new_ind,
-            padding_idx=-1,
-        )
+            # Convert the question and answer choices
+            converted_questions, converted_question_tags = index_to_names(
+                item["question"],
+                item["objects"],
+                old_det_to_new_ind,
+                padding_idx=-1,
+            )
 
-        converted_answers, converted_answer_tags = zip(
-            *[
-                index_to_names(
-                    answer,
-                    item["objects"],
-                    old_det_to_new_ind,
-                    padding_idx=-1,
+            converted_answers, converted_answer_tags = zip(
+                *[
+                    index_to_names(
+                        answer,
+                        item["objects"],
+                        old_det_to_new_ind,
+                        padding_idx=-1,
+                    )
+                    for answer in answer_choices
+                ]
+            )
+
+            instance_dict = {}  # Dictionary to store the instance
+
+            ########## IMAGE INFORMATION ##########
+
+            # Get image and its metadata paths
+            image_path = os.path.join(self.image_dir, item["img_fn"])
+            instance_dict["image_path"] = image_path
+
+            img_metadata_path = os.path.join(self.image_dir, item["metadata_fn"])
+
+            # Load metadata for the image
+            try:
+                with open(img_metadata_path, "r") as img_metadata_file:
+                    img_metadata = json.load(img_metadata_file)
+            except FileNotFoundError:
+                print(
+                    f"Warning: Metadata file '{img_metadata_path}' not found. Skipping instance at index {idx}."
                 )
-                for answer in answer_choices
+                return None
+
+            # Remove final dimension (detection confidence) from boxes
+            boxes = np.array(img_metadata["boxes"])[dets2use, :-1]
+
+            # Object categories based on COCO ontology
+            instance_dict["objects_cats"] = [item["objects"][i] for i in dets2use]
+
+            obj_labels = [
+                self.coco_obj_to_ind[item["objects"][i]] for i in dets2use.tolist()
             ]
-        )
 
-        instance_dict = {}  # dictionary to store the instance
-        instance_dict["question"] = converted_questions
-        instance_dict["question_tags"] = converted_question_tags
-        instance_dict["answers"] = converted_answers
-        instance_dict["answer_tags"] = converted_answer_tags
+            # NOTE: adding the whole image as an object
+            objects_tensors = [torch.Tensor(obj_labels) for x in obj_labels]
+            instance_dict["objects"] = torch.stack(objects_tensors, dim=0)
 
-        # Add the label for the instance based on answers or rationale mode
-        if self.split != "val_test":
-            instance_dict["label"] = item["{}_label".format(self.mode)]
+            # NOTE: padding the bounding boxes (-1) in dataloader
+            instance_dict["boxes"] = torch.Tensor(boxes)
 
-        instance_dict["metadata"] = {
-            "index": idx,
-            "annot_id": item["annot_id"],
-            "movie": item["movie"],
-            "img_fn": item["img_fn"],
-            "question_number": item["question_number"],
-        }
+            ########## QUESTION-ANSWER INFORMATION ##########
 
-        ########## IMAGE INFORMATION ##########
+            # Add the question, question tags, answers, and answer tags to the instance
+            instance_dict["question"] = converted_questions
+            instance_dict["question_tags"] = converted_question_tags
+            instance_dict["answers"] = converted_answers
+            instance_dict["answer_tags"] = converted_answer_tags
 
-        # Get image and its metadata paths
-        image_path = os.path.join(self.image_dir, item["img_fn"])
-        instance_dict["image_path"] = image_path
+            # Add the label for the instance based on answers or rationale mode
+            if self.split != "val_test":
+                instance_dict["label"] = item["{}_label".format(self.mode)]
 
-        img_metadata_path = os.path.join(self.image_dir, item["metadata_fn"])
+            instance_dict["metadata"] = {
+                "index": idx,
+                "annot_id": item["annot_id"],
+                "movie": item["movie"],
+                "img_fn": item["img_fn"],
+                "question_number": item["question_number"],
+            }
 
-        # Load metadata for the image
-        with open(img_metadata_path, "r") as img_metadata_file:
-            img_metadata = json.load(img_metadata_file)
+            return instance_dict
 
-        # Remove final dimension (detection confidence) from boxes
-        boxes = np.array(img_metadata["boxes"])[dets2use, :-1]
-
-        # Object categories based on coco ontology
-        instance_dict["objects_cats"] = [item["objects"][i] for i in dets2use]
-
-        obj_labels = [
-            self.coco_obj_to_ind[item["objects"][i]] for i in dets2use.tolist()
-        ]
-
-        # NOTE: adding the whole image as an object
-        objects_tensors = [torch.Tensor(obj_labels) for x in obj_labels]
-        instance_dict["objects"] = torch.stack(objects_tensors, dim=0)
-
-        # NOTE: padding the bounding boxes (-1) in dataloader
-        instance_dict["boxes"] = torch.Tensor(boxes)
-
-        return instance_dict
+        except Exception as e:
+            print(f"Error processing instance at index {idx}: {e}")
+            return None
 
 
 class VCRDataset(Dataset):
-    def __init__(self, data, objective="vqa", load_all: bool = True, size=1000):
+    def __init__(self, extractor, objective="vqa", load_all: bool = True, size=None):
         """
         Args:
-            data: List of dictionaries, where each dictionary contains:
+            extractor: An instance of VCRDataExtractor where each instance is a dictionary contains:
                 - 'question': str
                 - 'answers': list of 4 answers
                 - 'label': index of the correct answer (0 to 3)
@@ -285,16 +312,25 @@ class VCRDataset(Dataset):
             load_all: If True, load the entire dataset
             size: Number of instances to load
         """
+        self.extractor = extractor
         self.data = []
         self.fields_to_add = ["objects", "objects_cats"]
+        self.size = size if size is not None else len(self.extractor)
 
-        for instance in data:
+        for instance in self.extractor:
+            if instance is None:
+                continue
             annot_id = instance["metadata"]["annot_id"]
             image_path = instance["image_path"]
             question = instance["question"]
             answers = instance["answers"]
             label = instance["label"]
             bounding_boxes = instance["boxes"]
+
+            length = any(len(answer) > 77 for answer in answers)
+
+            if length:
+                continue
 
             self.data.extend(
                 {
@@ -320,7 +356,11 @@ class VCRDataset(Dataset):
 
         if not load_all:
             # Limit the dataset size
-            self.data = self.data[:size]
+            if self.size > len(self.data):
+                raise ValueError(
+                    f"Dataset size {self.size} is greater than the available data {len(self.data)}."
+                )
+            self.data = self.data[: self.size]
 
     def __len__(self):
         return len(self.data)

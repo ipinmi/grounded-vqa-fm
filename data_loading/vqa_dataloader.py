@@ -10,8 +10,8 @@ import json
 def load_vqa_data(
     filepath: str,
     split: str,
-    top_k: int = 1000,
-    max_pairs: int = 3999,
+    top_k: int,
+    max_pairs: int,
     load_all: bool = False,
 ):
     """

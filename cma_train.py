@@ -44,12 +44,6 @@ parser.add_argument(
     required=False,
     type=int,
 )
-parser.add_argument(
-    "--dataset",
-    help="Dataset to be used",
-    default="vcr",
-    required=True,
-)
 
 parser.add_argument(
     "--num_epochs",
@@ -57,6 +51,13 @@ parser.add_argument(
     default=20,
     required=False,
     type=int,
+)
+
+parser.add_argument(
+    "--dataset",
+    help="Dataset to be used",
+    default="vcr",
+    required=True,
 )
 
 args = parser.parse_args()
@@ -78,7 +79,7 @@ def train_cma_vcr(
     clip_model, preprocessor = clip.load("ViT-B/32", device=device)
 
     train_max_pairs = 10000
-    val_max_pairs = 500
+    val_max_pairs = 1000
 
     # Load the VCR train dataset
     extracted_train_vcr = VCRDataExtractor(
@@ -88,9 +89,7 @@ def train_cma_vcr(
         split="train",
         only_use_relevant_dets=True,
     )
-    train_dataset = VCRDataset(
-        extracted_train_vcr, "vqa", load_all=False, size=train_max_pairs
-    )
+    train_dataset = VCRDataset(extracted_train_vcr, "vqa", load_all=True)
     train_batch_sampler = BatchSampler(train_dataset, batch_size=batchSize)
     train_dataloader = VCRDataLoader(train_dataset, batch_sampler=train_batch_sampler)
 
@@ -102,9 +101,7 @@ def train_cma_vcr(
         split="val",
         only_use_relevant_dets=True,
     )
-    val_dataset = VCRDataset(
-        extracted_val_vcr, "vqa", load_all=False, size=val_max_pairs
-    )
+    val_dataset = VCRDataset(extracted_val_vcr, "vqa", load_all=True)
     val_batch_sampler = BatchSampler(val_dataset, batch_size=batchSize)
     val_dataloader = VCRDataLoader(val_dataset, batch_sampler=val_batch_sampler)
 
@@ -202,10 +199,8 @@ def train_cma_vcr(
                 elif current_task == "vqa-r":
                     output = model(image, question_tokens, choice_tokens)
 
-                # Backward pass
-                optimizer.zero_grad()
-                loss.backward()
-                optimizer.step()
+                # Compute the loss
+                loss = criterion(output, labels_tensor)
 
                 # Compute the accuracy and loss
                 epoch_val_loss += loss.item()
@@ -351,11 +346,6 @@ def train_cma_vqa(DATA_DIR, learn_rate, batchSize=BATCH_SIZE, num_epochs=NUM_EPO
                 # Forward pass
                 output = model(image_features, question_toks)
                 loss = criterion(output, answer_targets)
-
-                # Backward pass
-                optimizer.zero_grad()
-                loss.backward()
-                optimizer.step()
 
                 # Compute the accuracy and loss
                 epoch_val_loss += loss.item()
