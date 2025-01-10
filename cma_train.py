@@ -5,6 +5,8 @@ from tqdm import tqdm
 import argparse
 from torch.utils.data import DataLoader
 import subprocess
+import sys
+import matplotlib.pyplot as plt
 
 from data_loading.vcr_dataloader import (
     VCRDataExtractor,
@@ -131,6 +133,12 @@ def train_cma_vcr(
     # Initialize the best validation loss
     best_val_loss = float("inf")
 
+    train_losses = []
+    val_losses = []
+
+    train_acc = []
+    val_acc = []
+
     # Train the model
     for epoch in range(num_epochs):
         model.train()
@@ -220,10 +228,16 @@ def train_cma_vcr(
                 epoch_val_correct += (predicted == labels_tensor).sum().item()
 
         epoch_train_accuracy = epoch_train_correct / epoch_train_total
-        epoch_train_loss = epoch_train_loss / len(train_dataloader)
-
         epoch_val_accuracy = epoch_val_correct / epoch_val_total
-        epoch_val_loss = epoch_val_loss / len(val_dataloader)
+
+        epoch_train_loss /= len(train_dataloader)
+        epoch_val_loss /= len(val_dataloader)
+
+        train_losses.append(epoch_train_loss)
+        val_losses.append(epoch_val_loss)
+
+        train_acc.append(epoch_train_accuracy)
+        val_acc.append(epoch_val_accuracy)
 
         print(f"Epoch {epoch+1}/{num_epochs}")
         print(
@@ -241,6 +255,9 @@ def train_cma_vcr(
                 model.state_dict(),
                 f"{results_path}/vcr_clip_linear.pt",
             )
+
+    # Plot the evaluation metrics
+    run_and_plot(train_losses, val_losses, train_acc, val_acc, num_epochs)
 
     return model
 
@@ -289,7 +306,7 @@ def train_cma_vqa(DATA_DIR, learn_rate, batchSize=BATCH_SIZE, num_epochs=NUM_EPO
 
     # Initialize the model
     model = CLIPwithAttention(
-        clip_model=clip_model, num_answers=train_top_k, drop_out=0.1, task="vqa"
+        clip_model=clip_model, num_answers=len(train_answers), drop_out=0.5, task="vqa"
     ).to(device)
 
     # Define the loss function and optimizer
@@ -299,6 +316,14 @@ def train_cma_vqa(DATA_DIR, learn_rate, batchSize=BATCH_SIZE, num_epochs=NUM_EPO
 
     # Initialize the best validation loss
     best_val_loss = float("inf")
+
+    train_losses = []
+    val_losses = []
+
+    train_acc = []
+    val_acc = []
+
+    sys.stdout.flush()
 
     # Train the model
     for epoch in range(num_epochs):
@@ -366,10 +391,16 @@ def train_cma_vqa(DATA_DIR, learn_rate, batchSize=BATCH_SIZE, num_epochs=NUM_EPO
                 epoch_val_correct += predicted.eq(answer_targets).sum().item()
 
         epoch_train_accuracy = epoch_train_correct / epoch_train_total
-        epoch_train_loss = epoch_train_loss / len(train_dataloader)
-
         epoch_val_accuracy = epoch_val_correct / epoch_val_total
-        epoch_val_loss = epoch_val_loss / len(val_dataloader)
+
+        epoch_train_loss /= len(train_dataloader)
+        epoch_val_loss /= len(val_dataloader)
+
+        train_losses.append(epoch_train_loss)
+        val_losses.append(epoch_val_loss)
+
+        train_acc.append(epoch_train_accuracy)
+        val_acc.append(epoch_val_accuracy)
 
         print(f"Epoch {epoch+1}/{num_epochs}")
         print(
@@ -378,7 +409,7 @@ def train_cma_vqa(DATA_DIR, learn_rate, batchSize=BATCH_SIZE, num_epochs=NUM_EPO
         print(f"Val Loss: {epoch_val_loss:.4f}, Val Accuracy: {epoch_val_accuracy:.4f}")
 
         # Update the learning rate
-        scheduler.step()
+        # scheduler.step()
 
         # Save the best performing model
         if epoch_val_loss < best_val_loss:
@@ -387,7 +418,98 @@ def train_cma_vqa(DATA_DIR, learn_rate, batchSize=BATCH_SIZE, num_epochs=NUM_EPO
                 model.state_dict(),
                 f"{results_path}/vqa_clip_linear.pt",
             )
+
+    # Plot the evaluation metrics
+    run_and_plot(train_losses, val_losses, train_acc, val_acc, num_epochs)
     return model
+
+
+def run_and_plot(
+    train_losses,
+    val_losses,
+    train_acc_scores,
+    val_acc_scores,
+    n_epochs,
+):
+    """
+    This function collects the evaluation results and plots the evaluation metrics.
+    The evaluation results are saved to a text file, and the plots are saved as a PNG file.
+    """
+    # Ensure the data lengths match the epochs
+    train_losses = train_losses[:n_epochs]
+    train_acc_scores = train_acc_scores[:n_epochs]
+
+    ### Save train, val, test losses and acc scores for combined plotting with ensemble models
+    with open(f"{results_path}/cma_{dataset_type}_loss_acc.txt", "a") as f:
+        f.write(f"Model: Cross Modal CLIP Model Evaluation\n")
+        f.write("\n")
+        f.write(f"Train Loss: {train_losses}\n")
+        f.write(f"Val Loss: {val_losses}\n")
+        f.write("\n")
+        f.write(f"Train acc Score: {train_acc_scores}\n")
+        f.write(f"Val acc Score: {val_acc_scores}\n")
+        f.write("\n")
+
+    # Save the evaluation results
+    with open(f"{results_path}/cma_{dataset_type}_results.txt", "a") as f:
+        f.write(f"Model: Cross Modal CLIP Model Evaluation\n")
+        f.write("\n")
+        f.write(f"Train Loss: {round(train_losses[-1], 3)}\n")
+        f.write(f"Val Loss: {round(val_losses[-1], 3)}\n")
+        f.write("\n")
+        f.write(f"Train acc Score: {round(train_acc_scores[-1], 3)}\n")
+        f.write(f"Val acc Score: {round(val_acc_scores[-1], 3)}\n")
+        f.write("\n")
+
+    # Plot the losses with epochs on the x-axis
+    plt.figure(figsize=(12, 5))
+
+    plt.subplot(1, 2, 1)
+    plt.plot(
+        range(1, n_epochs + 1),
+        train_losses,
+        label="Train Loss",
+        color="blue",
+        linestyle="-",
+    )
+    plt.plot(
+        range(1, n_epochs + 1),
+        val_losses,
+        label="Validation Loss",
+        color="red",
+        linestyle=":",
+    )
+    plt.xlabel("Epoch")
+    plt.ylabel("Loss")
+    plt.title("Cross Entropy Loss per Epoch (Train, Val)")
+    plt.grid(True)
+    plt.legend()
+
+    # Plot the acc scores with epochs on the x-axis
+    plt.subplot(1, 2, 2)
+    plt.plot(
+        range(1, n_epochs + 1),
+        train_acc_scores,
+        label="Train Accuracy",
+        color="green",
+        linestyle="-",
+    )
+    plt.plot(
+        range(1, n_epochs + 1),
+        val_acc_scores,
+        label="Validation Accuracy",
+        color="orange",
+        linestyle=":",
+    )
+    plt.xlabel("Epoch")
+    plt.ylabel("Accuracy Score")
+    plt.title("Accuracy Score per Epoch (Train, Val)")
+    plt.grid(True)
+    plt.legend()
+
+    plt.tight_layout()
+    plt.savefig(f"{results_path}/{dataset_type}_cma_evaluation_plot.png")
+    plt.show()
 
 
 def vqa_usage():

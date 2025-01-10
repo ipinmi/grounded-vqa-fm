@@ -5,6 +5,8 @@ from tqdm import tqdm
 import argparse
 from torch.utils.data import DataLoader
 import subprocess
+import sys
+import matplotlib.pyplot as plt
 
 from data_loading.vcr_dataloader import (
     VCRDataExtractor,
@@ -78,7 +80,7 @@ results_path = args.results_path
 # make results directory
 subprocess.run(["mkdir", "-p", results_path])
 
-device = "cuda" if torch.cuda.is_available() else "cpu"
+Valice = "cuda" if torch.cuda.is_available() else "cpu"
 
 
 def train_linear_vcr(
@@ -86,7 +88,7 @@ def train_linear_vcr(
 ):
 
     # Load the pre-trained CLIP model
-    clip_model, preprocessor = clip.load("ViT-B/32", device=device)
+    clip_model, preprocessor = clip.load("ViT-B/32", Valice=Valice)
 
     # Load the VCR train dataset
     train_max_pairs = 10000
@@ -118,7 +120,7 @@ def train_linear_vcr(
     # Define the VCR linear model
     num_choices = 4  # number of possible answers
     model = VCRLinearModel(clip_model, num_choices, task="vqa")
-    model = model.to(device)
+    model = model.to(Valice)
 
     # Define the loss function and optimizer
     criterion = torch.nn.CrossEntropyLoss()
@@ -127,6 +129,12 @@ def train_linear_vcr(
 
     # Initialize the best validation loss
     best_val_loss = float("inf")
+
+    train_losses = []
+    val_losses = []
+
+    train_acc = []
+    val_acc = []
 
     # Train the model
     for epoch in range(num_epochs):
@@ -138,21 +146,21 @@ def train_linear_vcr(
         for batch in tqdm(train_dataloader):
             _, image_paths, questions, choices, labels, _ = batch
 
-            labels_tensor = torch.tensor(labels).to(device)
+            labels_tensor = torch.tensor(labels).to(Valice)
             labels_tensor = torch.argmax(labels_tensor, dim=0).unsqueeze(
                 0
             )  # Shape: (1,)
 
             # Prepare the text inputs (question and the possible choices) and image inputs
-            question_tokens = clip.tokenize(questions[0]).to(device)  # shape: (1, 77)
+            question_tokens = clip.tokenize(questions[0]).to(Valice)  # shape: (1, 77)
 
             # select the choice of the correct answer for the QA-R task
             correct_choice = choices[labels.index(1)]
 
-            choice_tokens = clip.tokenize(correct_choice).to(device)  # shape:  (1, 77)
+            choice_tokens = clip.tokenize(correct_choice).to(Valice)  # shape:  (1, 77)
 
             # Assuming one image per batch, open and preprocess it
-            image = preprocessor(Image.open(image_paths[0])).unsqueeze(0).to(device)
+            image = preprocessor(Image.open(image_paths[0])).unsqueeze(0).to(Valice)
 
             # Forward pass
             outputs = model(image, question_tokens, choice_tokens)
@@ -179,25 +187,25 @@ def train_linear_vcr(
             for batch in tqdm(val_dataloader):
                 _, image_paths, questions, choices, labels, _ = batch
 
-                labels_tensor = torch.tensor(labels).to(device)
+                labels_tensor = torch.tensor(labels).to(Valice)
                 labels_tensor = torch.argmax(labels_tensor, dim=0).unsqueeze(
                     0
                 )  # Shape: (1,)
 
                 # Prepare the text inputs (question and the possible choices) and image inputs
                 question_tokens = clip.tokenize(questions[0]).to(
-                    device
+                    Valice
                 )  # shape: (1, 77)
 
                 # select the choice of the correct answer for the QA-R task
                 correct_choice = choices[labels.index(1)]
 
                 choice_tokens = clip.tokenize(correct_choice).to(
-                    device
+                    Valice
                 )  # shape:  (1, 77)
 
                 # Assuming one image per batch, open and preprocess it
-                image = preprocessor(Image.open(image_paths[0])).unsqueeze(0).to(device)
+                image = preprocessor(Image.open(image_paths[0])).unsqueeze(0).to(Valice)
 
                 # Forward pass
                 outputs = model(image, question_tokens, choice_tokens)
@@ -212,6 +220,15 @@ def train_linear_vcr(
         epoch_train_accuracy = epoch_train_correct / epoch_train_total
         epoch_val_accuracy = epoch_val_correct / epoch_val_total
 
+        epoch_train_loss /= len(train_dataloader)
+        epoch_val_loss /= len(val_dataloader)
+
+        train_losses.append(epoch_train_loss)
+        val_losses.append(epoch_val_loss)
+
+        train_acc.append(epoch_train_accuracy)
+        val_acc.append(epoch_val_accuracy)
+
         print(f"Epoch {epoch+1}/{num_epochs}")
         print(
             f"Train Loss: {epoch_train_loss / len(train_dataloader):.4f}, Train Accuracy: {epoch_train_accuracy:.4f}"
@@ -219,8 +236,9 @@ def train_linear_vcr(
         print(
             f"Val Loss: {epoch_val_loss / len(val_dataloader):.4f}, Val Accuracy: {epoch_val_accuracy:.4f}"
         )
+        sys.stdout.flush()
 
-        scheduler.step()
+        # scheduler.step()
 
         # Save the best performing model
         if epoch_val_loss < best_val_loss:
@@ -234,9 +252,9 @@ def train_linear_vcr(
 
 def train_linear_vqa(DATA_DIR, LEARN_RATE, batchSize=BATCH_SIZE, num_epochs=NUM_EPOCHS):
     # Load the pre-trained CLIP model
-    device = "cuda" if torch.cuda.is_available() else "cpu"
+    Valice = "cuda" if torch.cuda.is_available() else "cpu"
 
-    clip_model, preprocessor = clip.load("ViT-B/32", device=device)
+    clip_model, preprocessor = clip.load("ViT-B/32", Valice=Valice)
 
     # Load the VQA train dataset and select the top k answers from each answer type
     # train questions: 443,757 questions
@@ -256,7 +274,7 @@ def train_linear_vqa(DATA_DIR, LEARN_RATE, batchSize=BATCH_SIZE, num_epochs=NUM_
     # Validation dataset
     # val questions: 214,354 questions
     val_qa_pairs, val_possible_answers_by_type, val_answers = load_vqa_data(
-        DATA_DIR, split="val", top_k=100, max_pairs=10000, load_all=False
+        DATA_DIR, split="val", top_k=50, max_pairs=10000, load_all=False
     )
     val_dataset = VQADataset(
         val_qa_pairs,
@@ -270,7 +288,7 @@ def train_linear_vqa(DATA_DIR, LEARN_RATE, batchSize=BATCH_SIZE, num_epochs=NUM_
     # Define the VQA linear model
     num_answers = len(train_answers)
     model = VQALinearModel(clip_model, num_answers)
-    model = model.to(device)
+    model = model.to(Valice)
 
     # Define the loss function and optimizer
     criterion = torch.nn.CrossEntropyLoss(label_smoothing=0.1)
@@ -279,6 +297,13 @@ def train_linear_vqa(DATA_DIR, LEARN_RATE, batchSize=BATCH_SIZE, num_epochs=NUM_
 
     # Initialize the best validation loss
     best_val_loss = float("inf")
+    train_losses = []
+    val_losses = []
+
+    train_acc = []
+    val_acc = []
+
+    sys.stdout.flush()
 
     # Train the model
     for epoch in range(num_epochs):
@@ -291,12 +316,12 @@ def train_linear_vqa(DATA_DIR, LEARN_RATE, batchSize=BATCH_SIZE, num_epochs=NUM_
             questions = batch["question"]
             # answers = batch["answer"]
             image_paths = batch["image_path"]
-            answer_targets = batch["answer_idx"].to(device)
+            answer_targets = batch["answer_idx"].to(Valice)
 
             # Prepare the text inputs (questions) and image inputs
-            question_toks = clip.tokenize(questions).to(device)
+            question_toks = clip.tokenize(questions).to(Valice)
             images = [Image.open(image_path) for image_path in image_paths]
-            image_features = torch.stack([preprocessor(i) for i in images]).to(device)
+            image_features = torch.stack([preprocessor(i) for i in images]).to(Valice)
 
             # Forward pass
             outputs = model(question_toks, image_features)
@@ -325,13 +350,13 @@ def train_linear_vqa(DATA_DIR, LEARN_RATE, batchSize=BATCH_SIZE, num_epochs=NUM_
                 questions = batch["question"]
                 # answers = batch["answer"]
                 image_paths = batch["image_path"]
-                answer_targets = batch["answer_idx"].to(device)
+                answer_targets = batch["answer_idx"].to(Valice)
 
                 # Prepare the text inputs (questions) and image inputs
-                question_toks = clip.tokenize(questions).to(device)
+                question_toks = clip.tokenize(questions).to(Valice)
                 images = [Image.open(image_path) for image_path in image_paths]
                 image_features = torch.stack([preprocessor(i) for i in images]).to(
-                    device
+                    Valice
                 )
 
                 # Forward pass only
@@ -347,16 +372,23 @@ def train_linear_vqa(DATA_DIR, LEARN_RATE, batchSize=BATCH_SIZE, num_epochs=NUM_
         epoch_train_accuracy = epoch_train_correct / epoch_train_total
         epoch_val_accuracy = epoch_val_correct / epoch_val_total
 
+        epoch_train_loss /= len(train_dataloader)
+        epoch_val_loss /= len(val_dataloader)
+
+        train_losses.append(epoch_train_loss)
+        val_losses.append(epoch_val_loss)
+
+        train_acc.append(epoch_train_accuracy)
+        val_acc.append(epoch_val_accuracy)
+
         print(f"Epoch {epoch+1}/{num_epochs}")
         print(
-            f"Train Loss: {epoch_train_loss / len(train_dataloader):.4f}, Train Accuracy: {epoch_train_accuracy:.4f}"
+            f"Train Loss: {epoch_train_loss:.4f}, Train Accuracy: {epoch_train_accuracy:.4f}"
         )
-        print(
-            f"Val Loss: {epoch_val_loss / len(val_dataloader):.4f}, Val Accuracy: {epoch_val_accuracy:.4f}"
-        )
+        print(f"Val Loss: {epoch_val_loss:.4f}, Val Accuracy: {epoch_val_accuracy:.4f}")
 
         # Update the learning rate
-        scheduler.step()
+        # scheduler.step()
 
         # Save the best performing model
         if epoch_val_loss < best_val_loss:
@@ -365,7 +397,99 @@ def train_linear_vqa(DATA_DIR, LEARN_RATE, batchSize=BATCH_SIZE, num_epochs=NUM_
                 model.state_dict(),
                 f"{results_path}/vqa_clip_linear.pt",
             )
+
+    # Plot the evaluation metrics
+    run_and_plot(train_losses, val_losses, train_acc, val_acc, num_epochs)
+
     return model
+
+
+def run_and_plot(
+    train_losses,
+    val_losses,
+    train_acc_scores,
+    val_acc_scores,
+    n_epochs,
+):
+    """
+    This function collects the evaluation results and plots the evaluation metrics.
+    The evaluation results are saved to a text file, and the plots are saved as a PNG file.
+    """
+    # Ensure the data lengths match the epochs
+    train_losses = train_losses[:n_epochs]
+    train_acc_scores = train_acc_scores[:n_epochs]
+
+    ### Save train, val, test losses and acc scores for combined plotting with ensemble models
+    with open(f"{results_path}/cma_{dataset_type}_loss_acc.txt", "a") as f:
+        f.write(f"Model: Cross Modal CLIP Model Evaluation\n")
+        f.write("\n")
+        f.write(f"Train Loss: {train_losses}\n")
+        f.write(f"Val Loss: {val_losses}\n")
+        f.write("\n")
+        f.write(f"Train acc Score: {train_acc_scores}\n")
+        f.write(f"Val acc Score: {val_acc_scores}\n")
+        f.write("\n")
+
+    # Save the evaluation results
+    with open(f"{results_path}/cma_{dataset_type}_results.txt", "a") as f:
+        f.write(f"Model: Cross Modal CLIP Model Evaluation\n")
+        f.write("\n")
+        f.write(f"Train Loss: {round(train_losses[-1], 3)}\n")
+        f.write(f"Val Loss: {round(val_losses[-1], 3)}\n")
+        f.write("\n")
+        f.write(f"Train acc Score: {round(train_acc_scores[-1], 3)}\n")
+        f.write(f"Val acc Score: {round(val_acc_scores[-1], 3)}\n")
+        f.write("\n")
+
+    # Plot the losses with epochs on the x-axis
+    plt.figure(figsize=(12, 5))
+
+    plt.subplot(1, 2, 1)
+    plt.plot(
+        range(1, n_epochs + 1),
+        train_losses,
+        label="Train Loss",
+        color="blue",
+        linestyle="-",
+    )
+    plt.plot(
+        range(1, n_epochs + 1),
+        val_losses,
+        label="Validation Loss",
+        color="red",
+        linestyle=":",
+    )
+    plt.xlabel("Epoch")
+    plt.ylabel("Loss")
+    plt.title("Cross Entropy Loss per Epoch (Train, Val)")
+    plt.grid(True)
+    plt.legend()
+
+    # Plot the acc scores with epochs on the x-axis
+    plt.subplot(1, 2, 2)
+    plt.plot(
+        range(1, n_epochs + 1),
+        train_acc_scores,
+        label="Train Accuracy",
+        color="green",
+        linestyle="-",
+    )
+    plt.plot(
+        range(1, n_epochs + 1),
+        val_acc_scores,
+        label="Validation Accuracy",
+        color="orange",
+        linestyle=":",
+    )
+    plt.xlabel("Epoch")
+    plt.ylabel("Accuracy Score")
+    plt.title("Accuracy Score per Epoch (Train, Val)")
+    plt.grid(True)
+    plt.legend()
+
+    plt.tight_layout()
+    plt.savefig(f"{results_path}/{dataset_type}_evaluation_plot.png")
+    plt.show()
 
 
 if __name__ == "__main__":
@@ -382,4 +506,4 @@ if __name__ == "__main__":
 
 
 # Sample usage: python3 linear_train.py --annots_dir data/vcr1annots --image_dir data/vcr1images --learn_rate 0.001 --batch_size 4 --num_epochs 20 --dataset vcr
-# Sample usage: python3 linear_train.py --annots_dir data/vqa_v2 --image_dir data/vqa_v2 --learn_rate 0.001  --batch_size 32 --num_epochs 20 --dataset vqa
+# Sample usage: python3 linear_train.py --annots_dir data/vqa_v2 --image_dir data/vqa_v2 --learn_rate 1e-3  --batch_size 64 --num_epochs 20 --dataset vqa
