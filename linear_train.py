@@ -4,6 +4,7 @@ from PIL import Image
 from tqdm import tqdm
 import argparse
 from torch.utils.data import DataLoader
+import subprocess
 
 from data_loading.vcr_dataloader import (
     VCRDataExtractor,
@@ -59,6 +60,12 @@ parser.add_argument(
     required=True,
 )
 
+parser.add_argument(
+    "--results_path",
+    help="Directory path for saving the model results",
+    default="results",
+)
+
 args = parser.parse_args()
 ANNOTS_DIR = args.annots_dir
 IMAGES_DIR = args.image_dir
@@ -66,6 +73,10 @@ LEARN_RATE = args.learn_rate
 dataset_type = args.dataset
 BATCH_SIZE = args.batch_size
 NUM_EPOCHS = args.num_epochs
+results_path = args.results_path
+
+# make results directory
+subprocess.run(["mkdir", "-p", results_path])
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -215,7 +226,8 @@ def train_linear_vcr(
         if epoch_val_loss < best_val_loss:
             best_val_loss = epoch_val_loss
             torch.save(
-                model.state_dict(), f"results/vqa_clip_linear_{epoch_val_loss:.2f}.pt"
+                model.state_dict(),
+                f"{results_path}/vcr_clip_linear.pt",
             )
     return model
 
@@ -350,7 +362,8 @@ def train_linear_vqa(DATA_DIR, LEARN_RATE, batchSize=BATCH_SIZE, num_epochs=NUM_
         if epoch_val_loss < best_val_loss:
             best_val_loss = epoch_val_loss
             torch.save(
-                model.state_dict(), f"results/vqa_clip_linear_{epoch_val_loss:.2f}.pt"
+                model.state_dict(),
+                f"{results_path}/vqa_clip_linear.pt",
             )
     return model
 

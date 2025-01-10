@@ -138,6 +138,14 @@ class VQADataset(Dataset):
 
             image_path = f"{self.filepath}/{split}2014/COCO_{split}2014_{image_id}.jpg"
 
+            # Verify if the image exists
+            try:
+                with open(image_path, "rb"):
+                    pass  # File exists
+            except FileNotFoundError:
+                print(f"Image not found: {image_path}")
+                continue
+
             self.dataset.append(
                 {
                     "annot_id": annot_id,
