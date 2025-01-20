@@ -1,0 +1,7 @@
+__pycache__
+.DS_Store
+*.pyc
+vqa_v2_test.ipynb
+data/
+results/
+models/
