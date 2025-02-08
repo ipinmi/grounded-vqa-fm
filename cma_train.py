@@ -253,7 +253,7 @@ def train_cma_vcr(
             best_val_loss = epoch_val_loss
             torch.save(
                 model.state_dict(),
-                f"{results_path}/vcr_clip_linear.pt",
+                f"{results_path}/vcr_clip_cma.pt",
             )
 
     # Plot the evaluation metrics
@@ -269,10 +269,10 @@ def train_cma_vqa(DATA_DIR, learn_rate, batchSize=BATCH_SIZE, num_epochs=NUM_EPO
 
     # Load the VQA train dataset and select the top k answers from each answer type
     # train questions: 443,757 questions
-    train_top_k = 10
-    val_top_k = 10
-    train_max_pairs = 1000
-    val_max_pairs = 50
+    train_top_k = 100
+    val_top_k = 100
+    train_max_pairs = 100000
+    val_max_pairs = 10000
 
     train_qa_pairs, train_possible_answers_by_type, train_answers = load_vqa_data(
         DATA_DIR,
@@ -409,14 +409,14 @@ def train_cma_vqa(DATA_DIR, learn_rate, batchSize=BATCH_SIZE, num_epochs=NUM_EPO
         print(f"Val Loss: {epoch_val_loss:.4f}, Val Accuracy: {epoch_val_accuracy:.4f}")
 
         # Update the learning rate
-        # scheduler.step()
+        scheduler.step()
 
         # Save the best performing model
         if epoch_val_loss < best_val_loss:
             best_val_loss = epoch_val_loss
             torch.save(
                 model.state_dict(),
-                f"{results_path}/vqa_clip_linear.pt",
+                f"{results_path}/vqa_clip_cma.pt",
             )
 
     # Plot the evaluation metrics
