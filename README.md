@@ -74,10 +74,10 @@ b. VQA v2 dataset
 mkdir -p data/vqa_v2
 curl -OL http://images.cocodataset.org/zips/train2014.zip OR wget http://images.cocodataset.org/zips/train2014.zip
 curl -OL http://images.cocodataset.org/zips/val2014.zip OR wget http://images.cocodataset.org/zips/val2014.zip
-unzip train2014.zip -d data/vqa_v2
-unzip val2014.zip -d data/vqa_v2
 
 # the VQA v2 annotations and questions are included in the created kaggle dataset
+unzip train2014.zip -d data/vqa_v2
+unzip val2014.zip -d data/vqa_v2
 ```
 
 c. Install the CLIP model (copied from the [official repository](https://github.com/openai/CLIP))

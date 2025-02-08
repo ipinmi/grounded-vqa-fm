@@ -87,12 +87,27 @@ device = "cuda" if torch.cuda.is_available() else "cpu"
 def train_cma_vcr(
     annots_dir, imgs_dir, learn_rate, batchSize=BATCH_SIZE, num_epochs=NUM_EPOCHS
 ):
+    """
+    This function trains the Cross Modal CLIP Model on the VCR dataset.
+
+    Args:
+    annots_dir: str, path to the directory containing the VCR annotations
+    imgs_dir: str, path to the directory containing the VCR images
+    learn_rate: float, the learning rate for the model
+    batchSize: int, the batch size for training (default: 4)
+    num_epochs: int, the number of epochs for training (default: 10)
+
+    Returns:
+    model: torch.nn.Module, the trained Cross Modal CLIP model
+    Accuracy and loss plots are saved to the results directory.
+
+    """
 
     # Load the pre-trained CLIP model
     clip_model, preprocessor = clip.load("ViT-B/32", device=device)
 
-    train_max_pairs = 10000
-    val_max_pairs = 1000
+    train_max_pairs = 100000
+    val_max_pairs = 10000
 
     # Load the VCR train dataset
     extracted_train_vcr = VCRDataExtractor(
@@ -101,8 +116,10 @@ def train_cma_vcr(
         mode="answer",
         split="train",
         only_use_relevant_dets=True,
+        load_all=False,
+        size=train_max_pairs,
     )
-    train_dataset = VCRDataset(extracted_train_vcr, "vqa", load_all=True)
+    train_dataset = VCRDataset(extracted_train_vcr, "vqa")
     train_batch_sampler = BatchSampler(train_dataset, batch_size=batchSize)
     train_dataloader = VCRDataLoader(train_dataset, batch_sampler=train_batch_sampler)
 
@@ -113,16 +130,22 @@ def train_cma_vcr(
         mode="answer",
         split="val",
         only_use_relevant_dets=True,
+        load_all=False,
+        size=val_max_pairs,
     )
-    val_dataset = VCRDataset(extracted_val_vcr, "vqa", load_all=True)
+    val_dataset = VCRDataset(extracted_val_vcr, "vqa")
     val_batch_sampler = BatchSampler(val_dataset, batch_size=batchSize)
     val_dataloader = VCRDataLoader(val_dataset, batch_sampler=val_batch_sampler)
 
     # Initialize the model
     num_choices = 4  # number of possible answers
     current_task = "vqa"
+    DROPOUT = 0.3
     model = CLIPwithAttention(
-        clip_model=clip_model, num_answers=num_choices, drop_out=0.1, task=current_task
+        clip_model=clip_model,
+        num_answers=num_choices,
+        drop_out=DROPOUT,
+        task=current_task,
     ).to(device)
 
     # Define the loss function and optimizer
@@ -263,6 +286,19 @@ def train_cma_vcr(
 
 
 def train_cma_vqa(DATA_DIR, learn_rate, batchSize=BATCH_SIZE, num_epochs=NUM_EPOCHS):
+    """
+    Train the Cross Modal CLIP Model on the VQA dataset.
+
+    Args:
+    DATA_DIR: str, path to the directory containing the VQA annotations
+    learn_rate: float, the learning rate for the model
+    batchSize: int, the batch size for training
+    num_epochs: int, the number of epochs for training
+
+    Returns:
+    model: torch.nn.Module, the trained Cross Modal CLIP model
+    Accuracy and loss plots are saved to the results directory.
+    """
 
     # Load the pre-trained CLIP model
     clip_model, preprocessor = clip.load("ViT-B/32", device=device)
@@ -303,6 +339,21 @@ def train_cma_vqa(DATA_DIR, learn_rate, batchSize=BATCH_SIZE, num_epochs=NUM_EPO
         all_answers=val_answers,
     )
     val_dataloader = DataLoader(val_dataset, batch_size=batchSize, shuffle=True)
+
+    # Test dataset
+    """test_qa_pairs, test_possible_answers_by_type, test_answers = load_vqa_data(
+        DATA_DIR, split="test", top_k=val_top_k, max_pairs=val_max_pairs, load_all=False
+    )
+    test_dataset = VQADataset(
+        test_qa_pairs,
+        split="test",
+        filepath=DATA_DIR,
+        answers_by_type=test_possible_answers_by_type,
+        all_answers=test_answers,
+    )
+    
+    test_dataloader = DataLoader(test_dataset, batch_size=batchSize, shuffle=True)
+    """
 
     # Initialize the model
     model = CLIPwithAttention(
@@ -512,43 +563,74 @@ def run_and_plot(
     plt.show()
 
 
-def vqa_usage():
+"""def test_cma_vqa(DATA_DIR, learn_rate, batchSize=BATCH_SIZE, num_epochs=NUM_EPOCHS):
+    
+    Train the Cross Modal CLIP Model on the VQA dataset.
+
+    Args:
+    DATA_DIR: str, path to the directory containing the VQA annotations
+    learn_rate: float, the learning rate for the model
+    batchSize: int, the batch size for training
+    num_epochs: int, the number of epochs for training
+
+    Returns:
+    model: torch.nn.Module, the trained Cross Modal CLIP model
+    Accuracy and loss plots are saved to the results directory.
+    """
+"""
+    # Load the pre-trained CLIP model
     clip_model, preprocessor = clip.load("ViT-B/32", device=device)
 
-    DATA_DIR = "data/vqa_v2"
-    batchSize = 4
-    train_qa_pairs, train_possible_answers_by_type, train_answers = load_vqa_data(
-        DATA_DIR, split="train", top_k=10, max_pairs=100, load_all=False
+    # load the VQA test dataset
+    val_top_k = 100
+    val_max_pairs = 10000
+    test_qa_pairs, test_possible_answers_by_type, test_answers = load_vqa_data(
+        DATA_DIR, split="test", top_k=val_top_k, max_pairs=val_max_pairs, load_all=False
     )
-    train_dataset = VQADataset(
-        train_qa_pairs,
-        split="train",
+    test_dataset = VQADataset(
+        test_qa_pairs,
+        split="test",
         filepath=DATA_DIR,
-        answers_by_type=train_possible_answers_by_type,
-        all_answers=train_answers,
+        answers_by_type=test_possible_answers_by_type,
+        all_answers=test_answers,
     )
-    train_dataloader = DataLoader(train_dataset, batch_size=batchSize, shuffle=True)
 
-    model = CLIPwithAttention(clip_model, num_answers=10, drop_out=0.1).to(device)
+    test_dataloader = DataLoader(test_dataset, batch_size=batchSize, shuffle=True)
 
-    for batch in tqdm(train_dataloader):
-        # annot_ids = batch["annot_id"].detach().numpy()
-        questions = batch["question"]
-        # answers = batch["answer"]
-        image_paths = batch["image_path"]
-        answer_targets = batch["answer_idx"].to(device)
+    # load the saved model from the results directory
+    trained_model = CLIPwithAttention(clip_model, num_answers=x, drop_out=0.1).to(
+        device
+    )
+    trained_model.load_state_dict(torch.load(f"{results_path}/vqa_clip_cma.pt"))  #
 
-        # Prepare the text inputs (questions) and image inputs
-        question_toks = clip.tokenize(questions).to(device)
-        images = [Image.open(image_path) for image_path in image_paths]
-        image_features = torch.stack([preprocessor(i) for i in images]).to(device)
+    # Evaluate the model on the test dataset
+    trained_model.eval()
+    test_correct = 0
+    test_total = 0
+    test_loss = 0
 
-        print(f"Question Tokens Shape: {question_toks.shape}")
-        print(f"Image Features Shape: {image_features.shape}")
+    with torch.no_grad():
+        for batch in tqdm(test_dataloader):
+            # annot_ids = batch["annot_id"].detach().numpy()
+            questions = batch["question"]
+            # answers = batch["answer"]
+            image_paths = batch["image_path"]
+            answer_targets = batch["answer_idx"].to(device)
 
-        output = model(image_features, question_toks)
+            # Prepare the text inputs (questions) and image inputs
+            question_toks = clip.tokenize(questions).to(device)
+            images = [Image.open(image_path) for image_path in image_paths]
+            image_features = torch.stack([preprocessor(i) for i in images]).to(device)
 
-        print(f"Output Shape: {output.shape}")
+            # Forward pass
+            output = trained_model(image_features, question_toks)
+            loss = criterion(output, answer_targets)
+
+            # Compute the accuracy and loss
+            test_loss += loss.item()
+            _, predicted = output.max(dim=1)
+            test_total += answer_targets.size(0)
+            test_correct += predicted.eq(answer_targets).sum().item()"""
 
 
 if __name__ == "__main__":
@@ -559,8 +641,6 @@ if __name__ == "__main__":
     else:
         raise ValueError("Dataset type not recognized")
 
-    # Test the model
-    # vqa_usage()
 
 # Sample usage: python3 cma_train.py --annots_dir data/vcr1annots --image_dir data/vcr1images --learn_rate 0.001 --batch_size 4 --num_epochs 2 --dataset vcr
 # Sample usage: python3 cma_train.py --annots_dir data/vqa_v2 --image_dir data/vqa_v2 --learn_rate 0.001 --batch_size 4 --num_epochs 2 --dataset vqa

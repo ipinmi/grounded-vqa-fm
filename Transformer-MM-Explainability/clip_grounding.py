@@ -150,7 +150,7 @@ def show_heatmap_on_text(text, text_encoding, R_text):
 
 
 def show_image_with_bounding_boxes(
-    image_relevance, image, orig_image, orig_bounding_boxes, threshold=0.5
+    image_relevance, image, orig_image, orig_bounding_boxes=None, threshold=0.5
 ):
     """
     Displays the original image with its bounding boxes alongside the image with relevance-based bounding boxes.
@@ -197,26 +197,37 @@ def show_image_with_bounding_boxes(
     for x, y, w, h in bounding_boxes:
         cv2.rectangle(vis, (x, y), (x + w, y + h), (0, 255, 0), 2)
 
-    # Convert orig_image to OpenCV format if it's a PIL image
-    if isinstance(orig_image, Image.Image):
-        orig_image = np.array(orig_image)
-    orig_image = cv2.cvtColor(orig_image, cv2.COLOR_RGB2BGR)
+    if orig_bounding_boxes is not None:
+        # Convert orig_image to OpenCV format if it's a PIL image
+        if isinstance(orig_image, Image.Image):
+            orig_image = np.array(orig_image)
+        orig_image = cv2.cvtColor(orig_image, cv2.COLOR_RGB2BGR)
 
-    # Draw the original bounding boxes on the original image
-    orig_with_boxes = orig_image.copy()
-    for box in orig_bounding_boxes:
-        x1, y1, x2, y2 = map(int, box.squeeze().tolist())
-        cv2.rectangle(orig_with_boxes, (x1, y1), (x2, y2), (0, 255, 0), 2)
+        # Draw the original bounding boxes on the original image
+        orig_with_boxes = orig_image.copy()
+        for box in orig_bounding_boxes:
+            x1, y1, x2, y2 = map(int, box.squeeze().tolist())
+            cv2.rectangle(orig_with_boxes, (x1, y1), (x2, y2), (0, 255, 0), 2)
 
-    # Plot both images
-    fig, axs = plt.subplots(1, 2, figsize=(12, 6))
-    axs[0].imshow(cv2.cvtColor(orig_with_boxes, cv2.COLOR_BGR2RGB))
-    axs[0].axis("off")
-    # axs[0].set_title("Original Image with Bounding Boxes")
-    axs[1].imshow(cv2.cvtColor(vis, cv2.COLOR_BGR2RGB))
-    axs[1].axis("off")
-    # axs[1].set_title("Relevance Map with Bounding Boxes")
-    plt.show()
+        # Plot both images
+        fig, axs = plt.subplots(1, 2, figsize=(12, 6))
+        axs[0].imshow(cv2.cvtColor(orig_with_boxes, cv2.COLOR_BGR2RGB))
+        axs[0].axis("off")
+        # axs[0].set_title("Original Image with Bounding Boxes")
+        axs[1].imshow(cv2.cvtColor(vis, cv2.COLOR_BGR2RGB))
+        axs[1].axis("off")
+        # axs[1].set_title("Relevance Map with Bounding Boxes")
+        plt.show()
+
+    else:
+        # Plot both images
+        fig, axs = plt.subplots(1, 2, figsize=(12, 6))
+        axs[0].imshow(cv2.cvtColor(vis, cv2.COLOR_BGR2RGB))
+        axs[0].axis("off")
+        axs[1].imshow(orig_image)
+        axs[1].axis("off")
+        # axs[1].set_title("Relevance Map with Bounding Boxes")
+        plt.show()
 
     return bounding_boxes
 

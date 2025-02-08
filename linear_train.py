@@ -86,6 +86,21 @@ device = "cuda" if torch.cuda.is_available() else "cpu"
 def train_linear_vcr(
     annots_dir, imgs_dir, learn_rate, batchSize=BATCH_SIZE, num_epochs=NUM_EPOCHS
 ):
+    """
+    Train the linear model for the VCR dataset using the image and text features from the frozen CLIP model.
+
+    Args:
+    annots_dir: str, path to the directory containing the VCR annotations
+    imgs_dir: str, path to the directory containing the VCR images
+    learn_rate: float, learning rate for the model
+    batchSize: int, batch size for training (default: 4)
+    num_epochs: int, number of epochs to train the model (default: 10)
+
+
+    Returns:
+    model: VCRLinearModel, trained linear model for the VCR dataset
+    Also plots the evaluation metrics (loss and accuracy) for the training and validation sets.
+    """
 
     # Load the pre-trained CLIP model
     clip_model, preprocessor = clip.load("ViT-B/32", device=device)
@@ -100,10 +115,10 @@ def train_linear_vcr(
         mode="answer",
         split="train",
         only_use_relevant_dets=True,
+        load_all=False,
+        size=train_max_pairs,
     )
-    train_dataset = VCRDataset(
-        extracted_train_vcr, "vqa", load_all=False, size=train_max_pairs
-    )
+    train_dataset = VCRDataset(extracted_train_vcr, "vqa")
     train_batch_sampler = BatchSampler(train_dataset, batch_size=batchSize)
     train_dataloader = VCRDataLoader(train_dataset, batch_sampler=train_batch_sampler)
 
@@ -114,10 +129,10 @@ def train_linear_vcr(
         mode="answer",
         split="val",
         only_use_relevant_dets=True,
+        load_all=False,
+        size=val_max_pairs,
     )
-    val_dataset = VCRDataset(
-        extracted_val_vcr, "vqa", load_all=False, size=val_max_pairs
-    )
+    val_dataset = VCRDataset(extracted_val_vcr, "vqa")
     val_batch_sampler = BatchSampler(val_dataset, batch_size=batchSize)
     val_dataloader = VCRDataLoader(val_dataset, batch_sampler=val_batch_sampler)
 
@@ -258,6 +273,20 @@ def train_linear_vcr(
 
 
 def train_linear_vqa(DATA_DIR, LEARN_RATE, batchSize=BATCH_SIZE, num_epochs=NUM_EPOCHS):
+    """
+    Train the linear model for the VQA dataset using the image and text features from the frozen CLIP model.
+
+    Args:
+    DATA_DIR: str, path to the directory containing the VQA annotations
+    LEARN_RATE: float, learning rate for the model
+    batchSize: int, batch size for training
+    num_epochs: int, number of epochs to train the model
+
+    Returns:
+    model: VQALinearModel, trained linear model for the VQA dataset
+    Also plots the evaluation metrics (loss and accuracy) for the training and validation sets.
+    """
+
     # Load the pre-trained CLIP model
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
