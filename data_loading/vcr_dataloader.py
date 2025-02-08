@@ -90,7 +90,7 @@ class VCRDataExtractor(Dataset):
         image_dir,
         mode="answer",
         split="val",
-        only_use_relevant_dets=True,
+        only_use_relevant_dets=False,
     ):
         """
         Args:
@@ -327,9 +327,14 @@ class VCRDataset(Dataset):
             label = instance["label"]
             bounding_boxes = instance["boxes"]
 
-            length = any(len(answer) > 77 for answer in answers)
+            ans_length = any(
+                len(answer) > 77 for answer in answers
+            )  # limited for qa task
+            question_length = any(
+                len(answer) > 77 for answer in answers
+            )  # limited for qa-r task
 
-            if length:
+            if ans_length or question_length:
                 continue
 
             self.data.extend(

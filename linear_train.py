@@ -80,7 +80,7 @@ results_path = args.results_path
 # make results directory
 subprocess.run(["mkdir", "-p", results_path])
 
-Valice = "cuda" if torch.cuda.is_available() else "cpu"
+device = "cuda" if torch.cuda.is_available() else "cpu"
 
 
 def train_linear_vcr(
@@ -88,11 +88,11 @@ def train_linear_vcr(
 ):
 
     # Load the pre-trained CLIP model
-    clip_model, preprocessor = clip.load("ViT-B/32", Valice=Valice)
+    clip_model, preprocessor = clip.load("ViT-B/32", device=device)
 
     # Load the VCR train dataset
-    train_max_pairs = 10000
-    val_max_pairs = 1000
+    train_max_pairs = 100000
+    val_max_pairs = 10000
 
     extracted_train_vcr = VCRDataExtractor(
         annots_dir,
@@ -101,7 +101,9 @@ def train_linear_vcr(
         split="train",
         only_use_relevant_dets=True,
     )
-    train_dataset = VCRDataset(extracted_train_vcr, "vqa", load_all=True)
+    train_dataset = VCRDataset(
+        extracted_train_vcr, "vqa", load_all=False, size=train_max_pairs
+    )
     train_batch_sampler = BatchSampler(train_dataset, batch_size=batchSize)
     train_dataloader = VCRDataLoader(train_dataset, batch_sampler=train_batch_sampler)
 
@@ -113,14 +115,16 @@ def train_linear_vcr(
         split="val",
         only_use_relevant_dets=True,
     )
-    val_dataset = VCRDataset(extracted_val_vcr, "vqa", load_all=True)
+    val_dataset = VCRDataset(
+        extracted_val_vcr, "vqa", load_all=False, size=val_max_pairs
+    )
     val_batch_sampler = BatchSampler(val_dataset, batch_size=batchSize)
     val_dataloader = VCRDataLoader(val_dataset, batch_sampler=val_batch_sampler)
 
     # Define the VCR linear model
     num_choices = 4  # number of possible answers
     model = VCRLinearModel(clip_model, num_choices, task="vqa")
-    model = model.to(Valice)
+    model = model.to(device)
 
     # Define the loss function and optimizer
     criterion = torch.nn.CrossEntropyLoss()
@@ -146,21 +150,21 @@ def train_linear_vcr(
         for batch in tqdm(train_dataloader):
             _, image_paths, questions, choices, labels, _ = batch
 
-            labels_tensor = torch.tensor(labels).to(Valice)
+            labels_tensor = torch.tensor(labels).to(device)
             labels_tensor = torch.argmax(labels_tensor, dim=0).unsqueeze(
                 0
             )  # Shape: (1,)
 
             # Prepare the text inputs (question and the possible choices) and image inputs
-            question_tokens = clip.tokenize(questions[0]).to(Valice)  # shape: (1, 77)
+            question_tokens = clip.tokenize(questions[0]).to(device)  # shape: (1, 77)
 
             # select the choice of the correct answer for the QA-R task
             correct_choice = choices[labels.index(1)]
 
-            choice_tokens = clip.tokenize(correct_choice).to(Valice)  # shape:  (1, 77)
+            choice_tokens = clip.tokenize(correct_choice).to(device)  # shape:  (1, 77)
 
             # Assuming one image per batch, open and preprocess it
-            image = preprocessor(Image.open(image_paths[0])).unsqueeze(0).to(Valice)
+            image = preprocessor(Image.open(image_paths[0])).unsqueeze(0).to(device)
 
             # Forward pass
             outputs = model(image, question_tokens, choice_tokens)
@@ -187,25 +191,25 @@ def train_linear_vcr(
             for batch in tqdm(val_dataloader):
                 _, image_paths, questions, choices, labels, _ = batch
 
-                labels_tensor = torch.tensor(labels).to(Valice)
+                labels_tensor = torch.tensor(labels).to(device)
                 labels_tensor = torch.argmax(labels_tensor, dim=0).unsqueeze(
                     0
                 )  # Shape: (1,)
 
                 # Prepare the text inputs (question and the possible choices) and image inputs
                 question_tokens = clip.tokenize(questions[0]).to(
-                    Valice
+                    device
                 )  # shape: (1, 77)
 
                 # select the choice of the correct answer for the QA-R task
                 correct_choice = choices[labels.index(1)]
 
                 choice_tokens = clip.tokenize(correct_choice).to(
-                    Valice
+                    device
                 )  # shape:  (1, 77)
 
                 # Assuming one image per batch, open and preprocess it
-                image = preprocessor(Image.open(image_paths[0])).unsqueeze(0).to(Valice)
+                image = preprocessor(Image.open(image_paths[0])).unsqueeze(0).to(device)
 
                 # Forward pass
                 outputs = model(image, question_tokens, choice_tokens)
@@ -247,14 +251,17 @@ def train_linear_vcr(
                 model.state_dict(),
                 f"{results_path}/vcr_clip_linear.pt",
             )
+
+    # Plot the evaluation metrics
+    run_and_plot(train_losses, val_losses, train_acc, val_acc, num_epochs)
     return model
 
 
 def train_linear_vqa(DATA_DIR, LEARN_RATE, batchSize=BATCH_SIZE, num_epochs=NUM_EPOCHS):
     # Load the pre-trained CLIP model
-    Valice = "cuda" if torch.cuda.is_available() else "cpu"
+    device = "cuda" if torch.cuda.is_available() else "cpu"
 
-    clip_model, preprocessor = clip.load("ViT-B/32", Valice=Valice)
+    clip_model, preprocessor = clip.load("ViT-B/32", device=device)
 
     # Load the VQA train dataset and select the top k answers from each answer type
     # train questions: 443,757 questions
@@ -274,7 +281,7 @@ def train_linear_vqa(DATA_DIR, LEARN_RATE, batchSize=BATCH_SIZE, num_epochs=NUM_
     # Validation dataset
     # val questions: 214,354 questions
     val_qa_pairs, val_possible_answers_by_type, val_answers = load_vqa_data(
-        DATA_DIR, split="val", top_k=50, max_pairs=10000, load_all=False
+        DATA_DIR, split="val", top_k=100, max_pairs=10000, load_all=False
     )
     val_dataset = VQADataset(
         val_qa_pairs,
@@ -288,7 +295,7 @@ def train_linear_vqa(DATA_DIR, LEARN_RATE, batchSize=BATCH_SIZE, num_epochs=NUM_
     # Define the VQA linear model
     num_answers = len(train_answers)
     model = VQALinearModel(clip_model, num_answers)
-    model = model.to(Valice)
+    model = model.to(device)
 
     # Define the loss function and optimizer
     criterion = torch.nn.CrossEntropyLoss(label_smoothing=0.1)
@@ -316,12 +323,12 @@ def train_linear_vqa(DATA_DIR, LEARN_RATE, batchSize=BATCH_SIZE, num_epochs=NUM_
             questions = batch["question"]
             # answers = batch["answer"]
             image_paths = batch["image_path"]
-            answer_targets = batch["answer_idx"].to(Valice)
+            answer_targets = batch["answer_idx"].to(device)
 
             # Prepare the text inputs (questions) and image inputs
-            question_toks = clip.tokenize(questions).to(Valice)
+            question_toks = clip.tokenize(questions).to(device)
             images = [Image.open(image_path) for image_path in image_paths]
-            image_features = torch.stack([preprocessor(i) for i in images]).to(Valice)
+            image_features = torch.stack([preprocessor(i) for i in images]).to(device)
 
             # Forward pass
             outputs = model(question_toks, image_features)
@@ -350,13 +357,13 @@ def train_linear_vqa(DATA_DIR, LEARN_RATE, batchSize=BATCH_SIZE, num_epochs=NUM_
                 questions = batch["question"]
                 # answers = batch["answer"]
                 image_paths = batch["image_path"]
-                answer_targets = batch["answer_idx"].to(Valice)
+                answer_targets = batch["answer_idx"].to(device)
 
                 # Prepare the text inputs (questions) and image inputs
-                question_toks = clip.tokenize(questions).to(Valice)
+                question_toks = clip.tokenize(questions).to(device)
                 images = [Image.open(image_path) for image_path in image_paths]
                 image_features = torch.stack([preprocessor(i) for i in images]).to(
-                    Valice
+                    device
                 )
 
                 # Forward pass only
