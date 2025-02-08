@@ -91,12 +91,16 @@ class VCRDataExtractor(Dataset):
         mode="answer",
         split="val",
         only_use_relevant_dets=False,
+        load_all=True,
+        size=None,
     ):
         """
         Args:
         split: train, val, val_test (split from val) or test
         mode: answer or rationale (Q-A or QA-R tasks)
         only_use_relevant_dets: If True, only use the relevant detections
+        load_all: If True, load the entire dataset
+        size: Number of instances to load
         """
         self.mode = mode
         self.split = split
@@ -110,6 +114,11 @@ class VCRDataExtractor(Dataset):
                 os.path.join(annots_dir, "{}.jsonl".format(split)), "r"
             ) as jsonl_file:
                 self.data = [json.loads(line) for line in jsonl_file]
+
+                # Load only the first 'size' instances if specified
+                if not load_all and size is not None:
+                    random.shuffle(self.data)  # Shuffle the data for random selection
+                    self.data = self.data[:size]
         except FileNotFoundError:
             print(
                 f"Warning: Annotation file '{split}.jsonl' not found in '{annots_dir}'. Skipping data loading."
@@ -299,7 +308,7 @@ class VCRDataExtractor(Dataset):
 
 
 class VCRDataset(Dataset):
-    def __init__(self, extractor, objective="vqa", load_all: bool = True, size=None):
+    def __init__(self, extractor, objective="vqa"):
         """
         Args:
             extractor: An instance of VCRDataExtractor where each instance is a dictionary contains:
@@ -309,16 +318,12 @@ class VCRDataset(Dataset):
             objective: zero shot objective
                 - 'vqa' (for visual question answering)
                 - 'objdet' (for object detection)
-            load_all: If True, load the entire dataset
-            size: Number of instances to load
         """
         self.extractor = extractor
         self.data = []
         self.fields_to_add = ["objects", "objects_cats"]
-        self.size = size if size is not None else len(self.extractor)
 
-        while load_all or len(self.data) < self.size:
-            instance = next(self.extractor, None)
+        for instance in self.extractor:
             if instance is None:
                 break
 
@@ -355,14 +360,6 @@ class VCRDataset(Dataset):
                 }
                 for idx, answer in enumerate(answers)
             )
-
-        # Validate data size after extraction if load_all is False
-        if not load_all and len(self.data) < self.size:
-            raise ValueError(
-                f"Dataset size {self.size} is greater than the available data {len(self.data)}."
-            )
-
-            # self.data = self.data[: self.size]
 
     def __len__(self):
         return len(self.data)

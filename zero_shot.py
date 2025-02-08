@@ -84,9 +84,10 @@ def vcr_main():
     )
 
     num_qa_pairs = len(extracted_vcr)
+    batchSize = 4  # number of possible answers for each question
 
     dataset = VCRDataset(extracted_vcr, "vqa", load_all=True, size=num_qa_pairs)
-    batch_sampler = BatchSampler(dataset, batch_size=4)
+    batch_sampler = BatchSampler(dataset, batch_size=batchSize)
     dataloader = VCRDataLoader(dataset, batch_sampler=batch_sampler)
 
     # Run the CLIP model

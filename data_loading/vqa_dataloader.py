@@ -7,6 +7,22 @@ from collections import defaultdict, Counter
 import json
 
 
+def save_top_k_answers(filepath, possible_answers_by_type):
+    """
+    Save the top-k answers for each answer type to a JSON file.
+    """
+    with open(filepath, "w") as f:
+        json.dump(possible_answers_by_type, f)
+
+
+def load_top_k_answers(filepath):
+    """
+    Load the top-k answers for each answer type from a JSON file.
+    """
+    with open(filepath, "r") as f:
+        return json.load(f)
+
+
 def load_vqa_data(
     filepath: str,
     split: str,
@@ -55,42 +71,46 @@ def load_vqa_data(
             "answer": a["multiple_choice_answer"],
             "answer_type": a["answer_type"],
         }
-        answers_by_type[a["answer_type"]].append(a["multiple_choice_answer"])
+        if split == "train":
+            answers_by_type[a["answer_type"]].append(a["multiple_choice_answer"])
 
-    if load_all:
+    if split == "train" and load_all:
         all_answers = list(
-            set(
-                answers_by_type["yes/no"]
-                + answers_by_type["number"]
-                + answers_by_type["other"]
-            )
+            set(answer for answers in answers_by_type.values() for answer in answers)
         )
         return qa_pairs, answers_by_type, all_answers
 
-    else:
+    if split == "train" and not load_all:
         # Select the top-k answers for each type
         possible_answers_by_type = {
             answer_type: [answer for answer, _ in Counter(answers).most_common(top_k)]
             for answer_type, answers in answers_by_type.items()
         }
 
-        # Filter qa_pairs to include only those with top-k answers
-        filtered_qa_pairs = {
-            q_id: data
-            for q_id, data in qa_pairs.items()
-            if data["answer"] in possible_answers_by_type[data["answer_type"]]
-        }
+        # Save the top-k answers
+        save_top_k_answers(f"{filepath}/top_k_answers.json", possible_answers_by_type)
 
-        # Select based on max_pairs
-        reduced_qa_pairs = dict(list(filtered_qa_pairs.items())[:max_pairs])
+    elif split != "train" and not load_all:
+        possible_answers_by_type = load_top_k_answers(f"{filepath}/top_k_answers.json")
 
-        # Get the joint set of possible answers
-        for answers in possible_answers_by_type.values():
-            all_answers.extend(answers)
+    # Filter qa_pairs to include only those with top-k answers
+    filtered_qa_pairs = {
+        q_id: data
+        for q_id, data in qa_pairs.items()
+        if data["answer"] in possible_answers_by_type.get(data["answer_type"], [])
+    }
 
-        random.shuffle(all_answers)
+    # Select based on max_pairs
+    reduced_qa_pairs = dict(list(filtered_qa_pairs.items())[:max_pairs])
 
-        return reduced_qa_pairs, possible_answers_by_type, all_answers
+    # Get the joint set of possible answers
+    all_answers = [
+        answer for answers in possible_answers_by_type.values() for answer in answers
+    ]
+
+    random.shuffle(all_answers)
+
+    return reduced_qa_pairs, possible_answers_by_type, all_answers
 
 
 class VQADataset(Dataset):
