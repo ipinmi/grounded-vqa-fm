@@ -317,9 +317,11 @@ class VCRDataset(Dataset):
         self.fields_to_add = ["objects", "objects_cats"]
         self.size = size if size is not None else len(self.extractor)
 
-        for instance in self.extractor:
+        while load_all or len(self.data) < self.size:
+            instance = next(self.extractor, None)
             if instance is None:
-                continue
+                break
+
             annot_id = instance["metadata"]["annot_id"]
             image_path = instance["image_path"]
             question = instance["question"]
@@ -327,16 +329,11 @@ class VCRDataset(Dataset):
             label = instance["label"]
             bounding_boxes = instance["boxes"]
 
-            ans_length = any(
-                len(answer) > 77 for answer in answers
-            )  # limited for qa task
-            question_length = any(
-                len(answer) > 77 for answer in answers
-            )  # limited for qa-r task
-
-            if ans_length or question_length:
+            # Check length constraints
+            if any(len(answer) > 77 for answer in answers) or len(question) > 77:
                 continue
 
+            # Append valid data entries
             self.data.extend(
                 {
                     "annot_id": annot_id,
@@ -359,13 +356,13 @@ class VCRDataset(Dataset):
                 for idx, answer in enumerate(answers)
             )
 
-        if not load_all:
-            # Limit the dataset size
-            if self.size > len(self.data):
-                raise ValueError(
-                    f"Dataset size {self.size} is greater than the available data {len(self.data)}."
-                )
-            self.data = self.data[: self.size]
+        # Validate data size after extraction if load_all is False
+        if not load_all and len(self.data) < self.size:
+            raise ValueError(
+                f"Dataset size {self.size} is greater than the available data {len(self.data)}."
+            )
+
+            # self.data = self.data[: self.size]
 
     def __len__(self):
         return len(self.data)

@@ -91,8 +91,8 @@ def train_cma_vcr(
     # Load the pre-trained CLIP model
     clip_model, preprocessor = clip.load("ViT-B/32", device=device)
 
-    train_max_pairs = 10000
-    val_max_pairs = 1000
+    train_max_pairs = 100000
+    val_max_pairs = 10000
 
     # Load the VCR train dataset
     extracted_train_vcr = VCRDataExtractor(
@@ -102,7 +102,9 @@ def train_cma_vcr(
         split="train",
         only_use_relevant_dets=True,
     )
-    train_dataset = VCRDataset(extracted_train_vcr, "vqa", load_all=True)
+    train_dataset = VCRDataset(
+        extracted_train_vcr, "vqa", load_all=False, size=train_max_pairs
+    )
     train_batch_sampler = BatchSampler(train_dataset, batch_size=batchSize)
     train_dataloader = VCRDataLoader(train_dataset, batch_sampler=train_batch_sampler)
 
@@ -114,15 +116,33 @@ def train_cma_vcr(
         split="val",
         only_use_relevant_dets=True,
     )
-    val_dataset = VCRDataset(extracted_val_vcr, "vqa", load_all=True)
+    val_dataset = VCRDataset(
+        extracted_val_vcr, "vqa", load_all=False, size=val_max_pairs
+    )
     val_batch_sampler = BatchSampler(val_dataset, batch_size=batchSize)
     val_dataloader = VCRDataLoader(val_dataset, batch_sampler=val_batch_sampler)
+
+    # Load the VCR test dataset
+    """extracted_test_vcr = VCRDataExtractor(
+        annots_dir,
+        imgs_dir,
+        mode="answer",
+        split="test",
+        only_use_relevant_dets=True,
+    )
+    test_dataset = VCRDataset(
+        extracted_test_vcr, "vqa", load_all=False, size=val_max_pairs
+    )"""
 
     # Initialize the model
     num_choices = 4  # number of possible answers
     current_task = "vqa"
+    DROPOUT = 0.3
     model = CLIPwithAttention(
-        clip_model=clip_model, num_answers=num_choices, drop_out=0.1, task=current_task
+        clip_model=clip_model,
+        num_answers=num_choices,
+        drop_out=DROPOUT,
+        task=current_task,
     ).to(device)
 
     # Define the loss function and optimizer
@@ -303,6 +323,18 @@ def train_cma_vqa(DATA_DIR, learn_rate, batchSize=BATCH_SIZE, num_epochs=NUM_EPO
         all_answers=val_answers,
     )
     val_dataloader = DataLoader(val_dataset, batch_size=batchSize, shuffle=True)
+
+    # Test dataset
+    """test_qa_pairs, test_possible_answers_by_type, test_answers = load_vqa_data(
+        DATA_DIR, split="test", top_k=val_top_k, max_pairs=val_max_pairs, load_all=False
+    )
+    test_dataset = VQADataset(
+        test_qa_pairs,
+        split="test",
+        filepath=DATA_DIR,
+        answers_by_type=test_possible_answers_by_type,
+        all_answers=test_answers,
+    )"""
 
     # Initialize the model
     model = CLIPwithAttention(
